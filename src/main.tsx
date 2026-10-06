@@ -4,11 +4,14 @@ import { BrowserRouter } from 'react-router-dom'
 
 import './index.css'
 import App from './App.tsx'
+import MusicProviderProvider from './providers/MusicProviderProvider'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <MusicProviderProvider>
+        <App />
+      </MusicProviderProvider>
     </BrowserRouter>
   </StrictMode>,
 )
