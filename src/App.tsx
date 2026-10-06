@@ -1,4 +1,10 @@
+import { NavLink, Route, Routes } from 'react-router-dom'
 import './App.css'
+
+import Home from './pages/Home/Home'
+import Library from './pages/Library/Library'
+import Search from './pages/Search/Search'
+import Settings from './pages/Settings/Settings'
 
 function App() {
   return (
@@ -8,13 +14,12 @@ function App() {
       </header>
 
       <main className="app-content">
-        <section className="welcome">
-          <p className="eyebrow">YOUR MUSIC. YOUR SERVERS.</p>
-          <h2>Welcome to MusicApp</h2>
-          <p>
-            Connect your music server and listen to your library anywhere.
-          </p>
-        </section>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/library" element={<Library />} />
+          <Route path="/search" element={<Search />} />
+          <Route path="/settings" element={<Settings />} />
+        </Routes>
       </main>
 
       <footer className="app-footer">
@@ -32,10 +37,21 @@ function App() {
         </div>
 
         <nav className="bottom-nav" aria-label="Main navigation">
-          <button type="button">Home</button>
-          <button type="button">Library</button>
-          <button type="button">Search</button>
-          <button type="button">Settings</button>
+          <NavLink to="/" end>
+            Home
+          </NavLink>
+
+          <NavLink to="/library">
+            Library
+          </NavLink>
+
+          <NavLink to="/search">
+            Search
+          </NavLink>
+
+          <NavLink to="/settings">
+            Settings
+          </NavLink>
         </nav>
       </footer>
     </div>
