@@ -16,7 +16,7 @@ function Album() {
   const {
     currentTrack,
     isPlaying,
-    play,
+    playQueue,
   } = usePlayer()
 
   const [album, setAlbum] =
@@ -235,7 +235,7 @@ function Album() {
                   : 'track-row'
               }
               onClick={() => {
-                void play(track)
+                void playQueue(tracks, index,)
               }}
               aria-label={`Play ${track.title} by ${track.artistName}`}
             >
