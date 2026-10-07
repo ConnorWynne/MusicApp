@@ -38,6 +38,11 @@ export interface MusicProvider {
   getAlbums(limit?: number, offset?: number): Promise<MusicAlbum[]>
 
   /**
+   * fetch a single album by its ID. Returns null if the album is not found.
+   */
+  getAlbum(albumId: string): Promise<MusicAlbum | null>
+
+  /**
    * Fetch the tracks belonging to an album.
    */
   getAlbumTracks(albumId: string): Promise<MusicTrack[]>

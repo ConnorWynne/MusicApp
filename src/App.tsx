@@ -1,12 +1,28 @@
-import { NavLink, Route, Routes } from 'react-router-dom'
+import {
+  NavLink,
+  Route,
+  Routes,
+} from 'react-router-dom'
+
+import { usePlayer } from './player/usePlayer'
+
 import './App.css'
 
 import Home from './pages/Home/Home'
 import Library from './pages/Library/Library'
 import Search from './pages/Search/Search'
 import Settings from './pages/Settings/Settings'
+import Album from './pages/Album/Album'
 
 function App() {
+  const {
+    currentTrack,
+    isPlaying,
+    isLoading,
+    playbackError,
+    togglePlayPause,
+  } = usePlayer()
+
   return (
     <div className="app">
       <header className="app-header">
@@ -22,7 +38,10 @@ function App() {
             className="main-nav"
             aria-label="Main navigation"
           >
-            <NavLink to="/" end>
+            <NavLink
+              to="/"
+              end
+            >
               Home
             </NavLink>
 
@@ -43,15 +62,26 @@ function App() {
 
       <main className="app-content">
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route
+            path="/"
+            element={<Home />}
+          />
+
           <Route
             path="/library"
             element={<Library />}
           />
+
+          <Route
+            path="/library/album/:albumId"
+            element={<Album />}
+          />
+
           <Route
             path="/search"
             element={<Search />}
           />
+
           <Route
             path="/settings"
             element={<Settings />}
@@ -63,20 +93,40 @@ function App() {
         <div className="mini-player">
           <div className="mini-player-info">
             <span className="mini-player-title">
-              Nothing playing
+              {isLoading
+                ? 'Loading audio…'
+                : currentTrack?.title ??
+                  'Nothing playing'}
             </span>
 
-            <span className="mini-player-artist">
-              Choose something from your library
+            <span
+              className={
+                playbackError
+                  ? 'mini-player-artist mini-player-error'
+                  : 'mini-player-artist'
+              }
+            >
+              {playbackError ??
+                currentTrack?.artistName ??
+                'Choose something from your library'}
             </span>
           </div>
 
           <button
             type="button"
-            disabled
-            aria-label="Play"
+            disabled={!currentTrack}
+            aria-label={
+              isPlaying
+                ? 'Pause'
+                : 'Play'
+            }
+            onClick={() => {
+              void togglePlayPause()
+            }}
           >
-            ▶
+            {isPlaying
+              ? '❚❚'
+              : '▶'}
           </button>
         </div>
 
@@ -84,7 +134,10 @@ function App() {
           className="bottom-nav"
           aria-label="Mobile navigation"
         >
-          <NavLink to="/" end>
+          <NavLink
+            to="/"
+            end
+          >
             Home
           </NavLink>
 

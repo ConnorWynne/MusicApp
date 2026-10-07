@@ -85,6 +85,12 @@ export class MockMusicProvider implements MusicProvider {
     return [demoAlbum]
   }
 
+  async getAlbum(albumId: string,): Promise<MusicAlbum | null> {
+    return albumId === demoAlbum.id
+        ? demoAlbum
+        : null
+}
+
   async getAlbumTracks(): Promise<MusicTrack[]> {
     return demoTracks
   }

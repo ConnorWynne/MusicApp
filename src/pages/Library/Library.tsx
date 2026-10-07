@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { useMusicProvider } from '../../providers/useMusicProviders'
 import type { MusicAlbum } from '../../providers/types/MusicTypes'
@@ -98,34 +99,35 @@ function Library() {
       {albums.length > 0 && (
         <div className="album-grid">
           {albums.map((album) => (
-            <article
-              className="album-card"
-              key={album.id}
+            <Link
+            className="album-card"
+            key={album.id}
+            to={`/library/album/${encodeURIComponent(album.id)}`}
             >
-              <div className="album-art">
+            <div className="album-art">
                 {album.coverArtUrl ? (
-                  <img
+                <img
                     src={album.coverArtUrl}
                     alt={`${album.title} cover`}
                     loading="lazy"
-                  />
+                />
                 ) : (
-                  <div className="album-art-placeholder">
+                <div className="album-art-placeholder">
                     ♪
-                  </div>
+                </div>
                 )}
-              </div>
+            </div>
 
-              <div className="album-card-info">
+            <div className="album-card-info">
                 <h3>{album.title}</h3>
 
                 <p>{album.artistName}</p>
 
                 {album.year && (
-                  <span>{album.year}</span>
+                <span>{album.year}</span>
                 )}
-              </div>
-            </article>
+            </div>
+            </Link>
           ))}
         </div>
       )}

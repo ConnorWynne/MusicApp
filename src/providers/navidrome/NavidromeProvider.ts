@@ -75,7 +75,18 @@ interface AlbumsResponse {
 }
 
 interface AlbumSongsResponse {
-  album?: NavidromeSong[]
+  album?: {
+    id: string
+    name: string
+    artist?: string
+    artistId?: string
+    year?: number
+    genre?: string
+    songCount?: number
+    duration?: number
+    coverArt?: string
+    song?: NavidromeSong[]
+  }
 }
 
 interface ArtistResponse {
@@ -211,6 +222,24 @@ export class NavidromeProvider implements MusicProvider {
     )
   }
 
+  async getAlbum(
+    albumId: string,
+    ): Promise<MusicAlbum | null> {
+    const response =
+        await this.client.request<AlbumSongsResponse>(
+        'getAlbum',
+        {
+            id: albumId,
+        },
+        )
+
+    if (!response.album) {
+        return null
+    }
+
+    return this.mapAlbum(response.album)
+    }
+
   async getAlbumTracks(
     albumId: string,
   ): Promise<MusicTrack[]> {
@@ -222,7 +251,7 @@ export class NavidromeProvider implements MusicProvider {
         },
       )
 
-    return (response.album ?? []).map(
+    return (response.album?.song ?? []).map(
       (song) => this.mapTrack(song),
     )
   }
