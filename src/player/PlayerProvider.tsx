@@ -79,6 +79,22 @@ function PlayerProvider({
   const audioRef =
     useRef<HTMLAudioElement | null>(null)
 
+    function getScrobbleThreshold(
+        track: MusicTrack,
+        ): number {
+        const duration =
+            track.duration ?? 0
+
+        if (duration <= 0) {
+            return 240
+        }
+
+        return Math.min(
+            duration / 2,
+            240,
+        )
+        }
+
   /*
    * Queue state.
    *
@@ -144,6 +160,27 @@ function PlayerProvider({
   const repeatModeRef =
   useRef<RepeatMode>('off')
 
+  const scrobbleTrackIdRef =
+    useRef<string | null>(null)
+
+    const scrobbleSubmittedRef =
+    useRef(false)
+
+    const scrobbleSubmissionInFlightRef =
+    useRef(false)
+
+    const nowPlayingSubmittedRef =
+    useRef(false)
+
+    const nowPlayingSubmissionInFlightRef =
+    useRef(false)
+
+    const playedTimeRef =
+    useRef(0)
+
+    const lastAudioTimeRef =
+    useRef(0)
+
   /*
    * Update the queue in both React state and
    * refs so event handlers always see the
@@ -160,6 +197,123 @@ function PlayerProvider({
     setQueue(nextQueue)
     setQueueIndex(nextIndex)
   }
+
+    function resetScrobbleState(
+        trackId: string,
+        ): void {
+        scrobbleTrackIdRef.current =
+            trackId
+
+        scrobbleSubmittedRef.current =
+            false
+
+        scrobbleSubmissionInFlightRef.current =
+            false
+
+        nowPlayingSubmittedRef.current =
+            false
+
+        nowPlayingSubmissionInFlightRef.current =
+            false
+
+        playedTimeRef.current =
+            0
+
+        lastAudioTimeRef.current =
+            0
+        }
+
+    async function submitNowPlaying(
+    trackId: string,
+    ): Promise<void> {
+    const activeProvider =
+        providerRef.current
+
+    if (!activeProvider) {
+        return
+    }
+
+    if (
+        scrobbleTrackIdRef.current !==
+        trackId
+    ) {
+        return
+    }
+
+    if (
+        nowPlayingSubmittedRef.current ||
+        nowPlayingSubmissionInFlightRef.current
+    ) {
+        return
+    }
+
+    nowPlayingSubmissionInFlightRef.current =
+        true
+
+    try {
+        await activeProvider.scrobble(
+        trackId,
+        false,
+        )
+
+        nowPlayingSubmittedRef.current =
+        true
+    } catch (error) {
+        console.error(
+        '[MusicApp] Failed to submit now-playing state:',
+        error,
+        )
+    } finally {
+        nowPlayingSubmissionInFlightRef.current =
+        false
+    }
+    }
+
+    async function submitScrobble(
+  trackId: string,
+): Promise<void> {
+  const activeProvider =
+    providerRef.current
+
+  if (!activeProvider) {
+    return
+  }
+
+  if (
+    scrobbleTrackIdRef.current !==
+    trackId
+  ) {
+    return
+  }
+
+  if (
+    scrobbleSubmittedRef.current ||
+    scrobbleSubmissionInFlightRef.current
+  ) {
+    return
+  }
+
+  scrobbleSubmissionInFlightRef.current =
+    true
+
+  try {
+    await activeProvider.scrobble(
+      trackId,
+      true,
+    )
+
+    scrobbleSubmittedRef.current =
+      true
+  } catch (error) {
+    console.error(
+      '[MusicApp] Failed to submit scrobble:',
+      error,
+    )
+  } finally {
+    scrobbleSubmissionInFlightRef.current =
+      false
+  }
+}
 
   /*
    * Create the audio element once.
@@ -199,9 +353,67 @@ function PlayerProvider({
     }
 
     function handleTimeUpdate() {
-      setCurrentTime(
-        audio.currentTime,
-      )
+    const currentTime =
+        audio.currentTime
+
+    setCurrentTime(
+        currentTime,
+    )
+
+    const previousTime =
+        lastAudioTimeRef.current
+
+    const elapsed =
+        currentTime - previousTime
+
+    /*
+    * Normal playback produces small positive
+    * time differences.
+    *
+    * A large jump usually means the user
+    * sought to another position.
+    *
+    * We do not count seeking as listening.
+    */
+    if (
+        elapsed > 0 &&
+        elapsed <= 2
+    ) {
+        playedTimeRef.current +=
+        elapsed
+    }
+
+    lastAudioTimeRef.current =
+        currentTime
+
+    const track =
+        queueRef.current[
+        queueIndexRef.current
+        ]
+
+    if (!track) {
+        return
+    }
+
+    if (
+        scrobbleSubmittedRef.current
+    ) {
+        return
+    }
+
+    const threshold =
+        getScrobbleThreshold(
+        track,
+        )
+
+    if (
+        playedTimeRef.current >=
+        threshold
+    ) {
+        void submitScrobble(
+        track.id,
+        )
+    }
     }
 
     function handleLoadedMetadata() {
@@ -212,76 +424,138 @@ function PlayerProvider({
       )
     }
 
-        const handleEnded = () => {
-        const currentQueue =
-            queueRef.current
+    const handleEnded = () => {
+    const endedTrack =
+        queueRef.current[
+        queueIndexRef.current
+        ]
 
-        const currentIndex =
-            queueIndexRef.current
+    if (
+        endedTrack &&
+        !scrobbleSubmittedRef.current
+    ) {
+        void submitScrobble(
+        endedTrack.id,
+        )
+    }
 
-        const currentShuffle =
-            shuffleRef.current
+    const currentQueue =
+        queueRef.current
 
-        const currentRepeatMode =
-            repeatModeRef.current
+    const currentIndex =
+        queueIndexRef.current
 
-        if (currentRepeatMode === 'one') {
+    const currentShuffle =
+        shuffleRef.current
+
+    const currentRepeatMode =
+        repeatModeRef.current
+
+    if (
+        currentQueue.length === 0
+    ) {
+        setIsPlaying(false)
+        return
+    }
+
+    if (
+        currentRepeatMode === 'one'
+    ) {
+        void playTrackAtIndex(
+        currentIndex,
+        )
+
+        return
+    }
+
+    /*
+    * Shuffle uses the same playback order
+    * as the Next / Previous buttons.
+    */
+    if (currentShuffle) {
+        const playbackOrder =
+        shuffleOrderRef.current
+
+        const currentPlaybackPosition =
+        playbackOrder.indexOf(
+            currentIndex,
+        )
+
+        const nextPlaybackPosition =
+        currentPlaybackPosition + 1
+
+        if (
+        nextPlaybackPosition <
+        playbackOrder.length
+        ) {
+        const nextQueueIndex =
+            playbackOrder[
+            nextPlaybackPosition
+            ]
+
+        if (
+            nextQueueIndex !== undefined
+        ) {
             void playTrackAtIndex(
+            nextQueueIndex,
+            )
+        }
+
+        return
+        }
+
+        if (
+        currentRepeatMode === 'all'
+        ) {
+        const newShuffleOrder =
+            createShuffleOrder(
+            currentQueue.length,
             currentIndex,
             )
 
-            return
-        }
+        shuffleOrderRef.current =
+            newShuffleOrder
+
+        const nextQueueIndex =
+            newShuffleOrder[1]
 
         if (
-            currentShuffle &&
-            currentQueue.length > 1
+            nextQueueIndex !== undefined
         ) {
-            const availableIndexes =
-            currentQueue
-                .map((_, index) => index)
-                .filter(
-                (index) =>
-                    index !== currentIndex,
-                )
-
-            const randomIndex =
-            availableIndexes[
-                Math.floor(
-                Math.random() *
-                    availableIndexes.length,
-                )
-            ]
-
             void playTrackAtIndex(
-            randomIndex,
+            nextQueueIndex,
             )
-
-            return
         }
 
-        const nextIndex =
-            currentIndex + 1
+        return
+        }
 
+        setIsPlaying(false)
+        return
+    }
+
+    const nextIndex =
+        currentIndex + 1
+
+    if (
+        nextIndex >=
+        currentQueue.length
+    ) {
         if (
-            nextIndex >=
-            currentQueue.length
+        currentRepeatMode === 'all'
         ) {
-            if (
-            currentRepeatMode === 'all'
-            ) {
-            void playTrackAtIndex(0)
-            return
-            }
-
-            setIsPlaying(false)
-            return
+        void playTrackAtIndex(0)
+        return
         }
 
-        void playTrackAtIndex(
-            nextIndex,
-        )
-        }
+        setIsPlaying(false)
+        return
+    }
+
+    void playTrackAtIndex(
+        nextIndex,
+    )
+    }
 
     function handleError() {
       const message =
@@ -456,6 +730,10 @@ function PlayerProvider({
       return
     }
 
+    resetScrobbleState(
+        queueTrack.id,
+    )
+
     const requestId =
       ++playRequestRef.current
 
@@ -496,6 +774,11 @@ function PlayerProvider({
       )
 
       await audio.play()
+
+      void submitNowPlaying(
+        queueTrack.id,
+      )
+
     } catch (error) {
       if (
         requestId !==

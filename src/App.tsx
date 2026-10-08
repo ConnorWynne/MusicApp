@@ -18,6 +18,7 @@ import Search from './pages/Search/Search'
 import Settings from './pages/Settings/Settings'
 import Album from './pages/Album/Album'
 import QueuePanel from './components/player/QueuePanel'
+import ExpandedPlayer from './components/player/ExpandedPlayer'
 
 
 function formatTime(seconds: number): string {
@@ -148,6 +149,7 @@ function App() {
   const [isSeeking, setIsSeeking] = useState(false)
   const [seekPosition, setSeekPosition] = useState(0)
   const [isQueueOpen, setIsQueueOpen] = useState(false)
+  const [isExpandedPlayerOpen, setIsExpandedPlayerOpen] = useState(false)
 
   return (
     <div className="app">
@@ -302,7 +304,7 @@ function App() {
             </span>
           </div>
           <div className="mini-player-main">
-            <div className="mini-player-info">
+            <button type="button" className="mini-player-info" disabled={!currentTrack} onClick={() => { setIsExpandedPlayerOpen(true) }}>
               <span className="mini-player-title">
                 {isLoading
                   ? 'Loading audio…'
@@ -321,7 +323,7 @@ function App() {
                   currentTrack?.artistName ??
                   'Choose something from your library'}
               </span>
-            </div>
+            </button>
 
             <div className="mini-player-controls-row">
               <button
@@ -502,6 +504,13 @@ function App() {
           </NavLink>
         </nav>
       </footer>
+              {isExpandedPlayerOpen && (
+            <ExpandedPlayer
+              onClose={() => {
+                setIsExpandedPlayerOpen(false)
+              }}
+            />
+          )}
     </div>
   )
 }
