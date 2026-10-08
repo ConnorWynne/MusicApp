@@ -15,6 +15,8 @@ import './App.css'
 import Home from './pages/Home/Home'
 import Library from './pages/Library/Library'
 import Songs from './pages/Library/Songs'
+import Artists from './pages/Library/Artists'
+import Artist from './pages/Library/Artist'
 import Search from './pages/Search/Search'
 import Settings from './pages/Settings/Settings'
 import Album from './pages/Album/Album'
@@ -208,15 +210,12 @@ function App() {
 
           <Route
             path="/library/artists"
-            element={
-              <section className="library-page">
-                <p className="eyebrow">LIBRARY</p>
-                <h2>Artists</h2>
-                <p className="library-message">
-                  Artists coming next.
-                </p>
-              </section>
-            }
+            element={<Artists />}
+          />
+
+          <Route
+            path="/library/artist/:artistId"
+            element={<Artist />}
           />
 
           <Route

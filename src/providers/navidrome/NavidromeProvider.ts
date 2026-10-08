@@ -16,7 +16,7 @@ interface NavidromeArtist {
   name: string
   albumCount?: number
   songCount?: number
-  artistImageUrl?: string
+  coverArt?: string
 }
 
 interface NavidromeAlbum {
@@ -63,7 +63,7 @@ interface NavidromePlaylist {
 interface ArtistsResponse {
   artists?: {
     index?: Array<{
-      artist: NavidromeArtist
+      artist?: NavidromeArtist[]
     }>
   }
 }
@@ -91,7 +91,7 @@ interface AlbumSongsResponse {
 
 interface ArtistResponse {
   artist?: {
-    song?: NavidromeSong[]
+    album?: NavidromeAlbum[]
   }
 }
 
@@ -188,20 +188,22 @@ export class NavidromeProvider implements MusicProvider {
       .map((song) => this.mapTrack(song))
   }
 
-  async getArtists(): Promise<MusicArtist[]> {
+    async getArtists(): Promise<MusicArtist[]> {
     const response =
-      await this.client.request<ArtistsResponse>(
+        await this.client.request<ArtistsResponse>(
         'getArtists',
-      )
+        )
 
     const artists: MusicArtist[] = []
 
     for (const index of response.artists?.index ?? []) {
-      artists.push(this.mapArtist(index.artist))
+        for (const artist of index.artist ?? []) {
+        artists.push(this.mapArtist(artist))
+        }
     }
 
     return artists
-  }
+    }
 
   async getAlbums(
     limit = 50,
@@ -256,21 +258,37 @@ export class NavidromeProvider implements MusicProvider {
     )
   }
 
-  async getArtistTracks(
-    artistId: string,
-  ): Promise<MusicTrack[]> {
-    const response =
-      await this.client.request<ArtistResponse>(
-        'getArtist',
-        {
-          id: artistId,
-        },
-      )
-
-    return (response.artist?.song ?? []).map(
-      (song) => this.mapTrack(song),
+async getArtistTracks(
+  artistId: string,
+): Promise<MusicTrack[]> {
+  const response =
+    await this.client.request<ArtistResponse>(
+      'getArtist',
+      {
+        id: artistId,
+      },
     )
-  }
+
+  const albums = response.artist?.album ?? []
+
+  const albumTracks = await Promise.all(
+    albums.map(async (album) => {
+      const albumResponse =
+        await this.client.request<AlbumSongsResponse>(
+          'getAlbum',
+          {
+            id: album.id,
+          },
+        )
+
+      return albumResponse.album?.song ?? []
+    }),
+  )
+
+  return albumTracks
+    .flat()
+    .map((song) => this.mapTrack(song))
+}
 
   async getTracks(
   limit = 100,
@@ -475,7 +493,14 @@ export class NavidromeProvider implements MusicProvider {
       name: artist.name,
       albumCount: artist.albumCount,
       songCount: artist.songCount,
-      imageUrl: artist.artistImageUrl,
+      imageUrl: artist.coverArt
+        ? this.client.buildAuthenticatedUrl(
+            'getCoverArt',
+            {
+              id: artist.coverArt,
+            },
+          )
+        : undefined,
     }
   }
 
