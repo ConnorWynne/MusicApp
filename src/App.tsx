@@ -17,6 +17,8 @@ import Library from './pages/Library/Library'
 import Search from './pages/Search/Search'
 import Settings from './pages/Settings/Settings'
 import Album from './pages/Album/Album'
+import QueuePanel from './components/player/QueuePanel'
+
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -125,8 +127,6 @@ function RepeatIcon() {
 function App() {
   const {
     currentTrack,
-    queue,
-    queueIndex,
     isPlaying,
     isLoading,
     playbackError,
@@ -134,6 +134,8 @@ function App() {
     duration,
     shuffle,
     repeatMode,
+    canGoNext,
+    canGoPrevious,
     togglePlayPause,
     toggleShuffle,
     cycleRepeatMode,
@@ -142,15 +144,10 @@ function App() {
     seek,
   } = usePlayer()
 
-  const hasPrevious =
-    queueIndex > 0
 
   const [isSeeking, setIsSeeking] = useState(false)
   const [seekPosition, setSeekPosition] = useState(0)
-
-  const hasNext =
-    queueIndex >= 0 &&
-    queueIndex < queue.length - 1
+  const [isQueueOpen, setIsQueueOpen] = useState(false)
 
   return (
     <div className="app">
@@ -220,7 +217,14 @@ function App() {
 
       <footer className="app-footer">
         <div className="mini-player">
-                    <div className="player-progress">
+          {isQueueOpen && (
+          <QueuePanel
+              onClose={() => {
+                setIsQueueOpen(false)
+              }}
+            />
+          )}
+          <div className="player-progress">
             <span className="player-time">
               {formatTime(
                 isSeeking
@@ -320,6 +324,44 @@ function App() {
             </div>
 
             <div className="mini-player-controls-row">
+              <button
+                type="button"
+                className={
+                  isQueueOpen
+                    ? 'player-control player-control-active'
+                    : 'player-control'
+                }
+                onClick={() => {
+                  setIsQueueOpen(
+                    current => !current,
+                  )
+                }}
+                aria-label={
+                  isQueueOpen
+                    ? 'Close queue'
+                    : 'Open queue'
+                }
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M4 6h16M4 12h10M4 18h7"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M18 15v6M15 18h6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
               <div className="player-control-wrapper">
                 <button
                   type="button"
@@ -351,7 +393,7 @@ function App() {
                 <button
                   type="button"
                   className="player-control"
-                  disabled={!currentTrack || !hasPrevious}
+                  disabled={!canGoPrevious}
                   aria-label="Previous"
                   onClick={() => {
                     void previous()
@@ -391,10 +433,7 @@ function App() {
                 <button
                   type="button"
                   className="player-control"
-                  disabled={
-                    !currentTrack ||
-                    !hasNext
-                  }
+                  disabled={!canGoNext}
                   aria-label="Next track"
                   onClick={() => {
                     void next()

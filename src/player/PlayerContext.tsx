@@ -11,6 +11,9 @@ export interface PlayerContextValue {
   repeatMode: RepeatMode
   shuffle: boolean
 
+  canGoNext: boolean
+  canGoPrevious: boolean
+
   isPlaying: boolean
   isLoading: boolean
   playbackError: string | null
@@ -29,6 +32,21 @@ export interface PlayerContextValue {
     tracks: MusicTrack[],
     startIndex?: number,
   ) => Promise<void>
+
+  playQueueTrack: (
+    index: number,
+  ) => void
+
+  removeFromQueue: (
+    index: number,
+  ) => void
+
+  moveQueueItem: (
+    fromIndex: number,
+    toIndex: number,    
+  ) => void
+
+  clearQueue: () => void
 
   pause: () => void
 

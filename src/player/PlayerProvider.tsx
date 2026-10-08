@@ -98,6 +98,9 @@ function PlayerProvider({
   const queueIndexRef =
     useRef(-1)
 
+    const shuffleOrderRef =
+    useRef<number[]>([])
+
   const providerRef =
     useRef(provider)
 
@@ -302,6 +305,7 @@ function PlayerProvider({
       setIsLoading(false)
       setPlaybackError(message)
     }
+
 
     audio.addEventListener(
       'play',
@@ -579,6 +583,176 @@ function PlayerProvider({
     )
   }
 
+  async function playQueueTrack(
+    index: number,
+  ): Promise<void> {
+    const tracks =
+      queueRef.current
+
+      const track = tracks[index]
+
+      if (!track) {
+        return
+      }
+
+      await playTrackAtIndex(
+        index,
+        track,
+      )
+    }
+
+      function removeFromQueue(
+            index: number,
+        ): void {
+            const currentQueue =
+            queueRef.current
+
+            if (
+            index < 0 ||
+            index >= currentQueue.length
+            ) {
+            return
+            }
+
+            const currentIndex =
+            queueIndexRef.current
+
+            const nextQueue =
+            currentQueue.filter(
+                (_, queueIndex) =>
+                queueIndex !== index,
+            )
+
+            if (nextQueue.length === 0) {
+            audioRef.current?.pause()
+
+            if (audioRef.current) {
+                audioRef.current.removeAttribute('src')
+                audioRef.current.load()
+            }
+
+            queueRef.current = []
+            queueIndexRef.current = -1
+
+            setQueue([])
+            setQueueIndex(-1)
+            setCurrentTrack(null)
+            setCurrentTime(0)
+            setDuration(0)
+            setIsPlaying(false)
+            setIsLoading(false)
+
+            return
+            }
+
+            let nextIndex = currentIndex
+
+            if (index < currentIndex) {
+            nextIndex -= 1
+            }
+
+            if (index === currentIndex) {
+            nextIndex = Math.min(
+                currentIndex,
+                nextQueue.length - 1,
+            )
+            }
+
+            const nextTrack = nextQueue[nextIndex]
+            updateQueue(
+            nextQueue,
+            nextIndex,
+            )
+
+            if (index === currentIndex && nextTrack) {
+                void playTrackAtIndex(nextIndex, nextTrack,)
+            }
+        }
+  
+      function moveQueueItem(
+        fromIndex: number,
+        toIndex: number,
+    ): void {
+        const currentQueue =
+        queueRef.current
+
+        if (
+        fromIndex < 0 ||
+        fromIndex >= currentQueue.length ||
+        toIndex < 0 ||
+        toIndex >= currentQueue.length ||
+        fromIndex === toIndex
+        ) {
+        return
+        }
+
+        const nextQueue =
+        [...currentQueue]
+
+        const [
+        movedTrack,
+        ] = nextQueue.splice(
+        fromIndex,
+        1,
+        )
+
+        if (!movedTrack) {
+        return
+        }
+
+        nextQueue.splice(
+        toIndex,
+        0,
+        movedTrack,
+        )
+
+        const currentIndex =
+        queueIndexRef.current
+
+        let nextIndex =
+        currentIndex
+
+        if (currentIndex === fromIndex) {
+        nextIndex = toIndex
+        } else if (
+        fromIndex < currentIndex &&
+        toIndex >= currentIndex
+        ) {
+        nextIndex -= 1
+        } else if (
+        fromIndex > currentIndex &&
+        toIndex <= currentIndex
+        ) {
+        nextIndex += 1
+        }
+
+        updateQueue(
+        nextQueue,
+        nextIndex,
+        )
+    }
+
+      function clearQueue(): void {
+        audioRef.current?.pause()
+
+        if (audioRef.current) {
+        audioRef.current.removeAttribute('src')
+        audioRef.current.load()
+        }
+
+        queueRef.current = []
+        queueIndexRef.current = -1
+
+        setQueue([])
+        setQueueIndex(-1)
+        setCurrentTrack(null)
+        setCurrentTime(0)
+        setDuration(0)
+        setIsPlaying(false)
+        setIsLoading(false)
+        setPlaybackError(null)
+    }
+
   function pause() {
     audioRef.current?.pause()
     setIsLoading(false)
@@ -619,14 +793,31 @@ function PlayerProvider({
     }
   }
 
-    const toggleShuffle = () => {
-    setShuffle((current) => {
-        const next = !current
+    function toggleShuffle(): void {
+    setShuffle(
+        currentShuffle => {
+        const nextShuffle =
+            !currentShuffle
 
-        shuffleRef.current = next
+        if (nextShuffle) {
+            const currentIndex =
+            queueIndexRef.current
 
-        return next
-    })
+            if (
+            queueRef.current.length > 0 &&
+            currentIndex >= 0
+            ) {
+            shuffleOrderRef.current =
+                createShuffleOrder(
+                queueRef.current.length,
+                currentIndex,
+                )
+            }
+        }
+
+        return nextShuffle
+        },
+    )
     }
 
     const cycleRepeatMode = () => {
@@ -647,84 +838,267 @@ function PlayerProvider({
     })
     }
 
-  async function next(): Promise<void> {
-    const tracks =
-      queueRef.current
+        function createShuffleOrder(
+        length: number,
+        startIndex: number,
+        ): number[] {
+        const remaining = Array.from(
+            { length },
+            (_, index) => index,
+        ).filter(
+            index => index !== startIndex,
+        )
 
-    const currentIndex =
-      queueIndexRef.current
+        for (
+            let index = remaining.length - 1;
+            index > 0;
+            index -= 1
+        ) {
+            const randomIndex =
+            Math.floor(
+                Math.random() * (index + 1),
+            )
 
-    const nextIndex =
-      currentIndex + 1
+            const temporary =
+            remaining[index]
 
-    if (
-      nextIndex >= tracks.length
-    ) {
-      return
-    }
+            remaining[index] =
+            remaining[randomIndex]
 
-    const nextTrack =
-      tracks[nextIndex]
+            remaining[randomIndex] =
+            temporary
+        }
 
-    if (!nextTrack) {
-      return
-    }
+        return [
+            startIndex,
+            ...remaining,
+        ]
+        }
 
-    await playTrackAtIndex(
-      nextIndex,
-      nextTrack,
-    )
-  }
+        async function next(): Promise<void> {
+        const currentQueue =
+            queueRef.current
 
-  async function previous(): Promise<void> {
-    const audio =
-      audioRef.current
+        if (currentQueue.length === 0) {
+            return
+        }
 
-    if (!audio) {
-      return
-    }
+        const playbackOrder =
+            getPlaybackOrder()
 
-    /*
-     * Standard music-player behavior:
-     *
-     * If we're more than 3 seconds into
-     * the current song, restart it.
-     *
-     * Otherwise go to the previous track.
-     */
-    if (audio.currentTime > 3) {
-      audio.currentTime = 0
-      setCurrentTime(0)
-      return
-    }
+        const currentPlaybackPosition =
+            playbackOrder.indexOf(
+            queueIndexRef.current,
+            )
 
-    const tracks =
-      queueRef.current
+        // Repeat One
+        if (repeatMode === 'one') {
+            const currentTrack =
+            currentQueue[
+                queueIndexRef.current
+            ]
 
-    const currentIndex =
-      queueIndexRef.current
+            if (currentTrack) {
+            await playTrackAtIndex(
+                queueIndexRef.current,
+                currentTrack,
+            )
+            }
 
-    const previousIndex =
-      currentIndex - 1
+            return
+        }
 
-    if (previousIndex < 0) {
-      audio.currentTime = 0
-      setCurrentTime(0)
-      return
-    }
+        // There is another track in the
+        // current playback order.
+        const nextPlaybackPosition =
+            currentPlaybackPosition + 1
 
-    const previousTrack =
-      tracks[previousIndex]
+        if (
+            nextPlaybackPosition <
+            playbackOrder.length
+        ) {
+            const nextQueueIndex =
+            playbackOrder[
+                nextPlaybackPosition
+            ]
 
-    if (!previousTrack) {
-      return
-    }
+            if (
+            nextQueueIndex !== undefined
+            ) {
+            const nextTrack =
+                currentQueue[nextQueueIndex]
 
-    await playTrackAtIndex(
-      previousIndex,
-      previousTrack,
-    )
-  }
+            if (nextTrack) {
+                await playTrackAtIndex(
+                nextQueueIndex,
+                nextTrack,
+                )
+            }
+            }
+
+            return
+        }
+
+        // We reached the end.
+        // Repeat All loops back around.
+        if (repeatMode === 'all') {
+            if (shuffle) {
+            const newShuffleOrder =
+                createShuffleOrder(
+                currentQueue.length,
+                queueIndexRef.current,
+                )
+
+            shuffleOrderRef.current =
+                newShuffleOrder
+
+            const nextQueueIndex =
+                newShuffleOrder[1]
+
+            if (
+                nextQueueIndex !== undefined
+            ) {
+                const nextTrack =
+                currentQueue[nextQueueIndex]
+
+                await playTrackAtIndex(
+                nextQueueIndex,
+                nextTrack,
+                )
+            }
+            } else {
+            const firstTrack =
+                currentQueue[0]
+
+            if (firstTrack) {
+                await playTrackAtIndex(
+                0,
+                firstTrack,
+                )
+            }
+            }
+        }
+        }
+
+    function getPlaybackOrder(): number[] {
+        if (!shuffle) {
+            return queueRef.current.map(
+            (_, index) => index,
+            )
+        }
+
+        return shuffleOrderRef.current
+        }
+
+    function getCanGoPrevious(): boolean {
+        if (queueRef.current.length === 0) {
+            return false
+        }
+
+        if (repeatMode === 'all') {
+            return true
+        }
+
+        const playbackOrder =
+            getPlaybackOrder()
+
+        const playbackPosition =
+            playbackOrder.indexOf(
+            queueIndexRef.current,
+            )
+
+        return playbackPosition > 0
+        }
+
+        function getCanGoNext(): boolean {
+        if (queueRef.current.length === 0) {
+            return false
+        }
+
+        if (repeatMode === 'all') {
+            return true
+        }
+
+        const playbackOrder =
+            getPlaybackOrder()
+
+        const playbackPosition =
+            playbackOrder.indexOf(
+            queueIndexRef.current,
+            )
+
+        return (
+            playbackPosition >= 0 &&
+            playbackPosition <
+            playbackOrder.length - 1
+        )
+        }
+
+        async function previous(): Promise<void> {
+        const currentQueue =
+            queueRef.current
+
+        if (currentQueue.length === 0) {
+            return
+        }
+
+        const playbackOrder =
+            getPlaybackOrder()
+
+        const currentPlaybackPosition =
+            playbackOrder.indexOf(
+            queueIndexRef.current,
+            )
+
+        if (currentPlaybackPosition <= 0) {
+            if (repeatMode === 'all') {
+            const previousQueueIndex =
+                playbackOrder[
+                playbackOrder.length - 1
+                ]
+
+            if (
+                previousQueueIndex !== undefined
+            ) {
+                const previousTrack =
+                currentQueue[
+                    previousQueueIndex
+                ]
+
+                if (previousTrack) {
+                await playTrackAtIndex(
+                    previousQueueIndex,
+                    previousTrack,
+                )
+                }
+            }
+            }
+
+            return
+        }
+
+        const previousPlaybackPosition =
+            currentPlaybackPosition - 1
+
+        const previousQueueIndex =
+            playbackOrder[
+            previousPlaybackPosition
+            ]
+
+        if (
+            previousQueueIndex !== undefined
+        ) {
+            const previousTrack =
+            currentQueue[previousQueueIndex]
+
+            if (previousTrack) {
+            await playTrackAtIndex(
+                previousQueueIndex,
+                previousTrack,
+            )
+            }
+        }
+        }
 
   function seek(time: number) {
     const audio =
@@ -783,6 +1157,9 @@ function PlayerProvider({
       queue,
       queueIndex,
 
+      canGoNext: getCanGoNext(),
+      canGoPrevious: getCanGoPrevious(),
+
       isPlaying,
       isLoading,
       playbackError,
@@ -796,6 +1173,10 @@ function PlayerProvider({
 
       play,
       playQueue,
+      playQueueTrack,
+      removeFromQueue,
+      moveQueueItem,
+      clearQueue,
 
       pause,
       togglePlayPause,
@@ -823,6 +1204,10 @@ function PlayerProvider({
       volume,
       shuffle,
       repeatMode,
+      playQueueTrack,
+      removeFromQueue,
+      moveQueueItem,
+      clearQueue,
       toggleShuffle,
       cycleRepeatMode,
     ],

@@ -139,6 +139,7 @@
 .mini-player {
   width: min(100%, 1100px);
   min-height: 88px;
+  position: relative;
 
   margin: 0 auto;
 
@@ -1166,5 +1167,249 @@
   transform: translate(-50%, 0);
 
   transition-delay: 150ms;
+}
+
+/* =========================================================
+   QUEUE
+   ========================================================= */
+
+.queue-panel {
+  position: absolute;
+  right: 1rem;
+  bottom: calc(100% + 0.75rem);
+
+  width: min(420px, calc(100vw - 2rem));
+  max-height: min(600px, 70vh);
+
+  display: flex;
+  flex-direction: column;
+
+  padding: 1rem;
+
+  background: rgba(20, 20, 24, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.35);
+
+  overflow: hidden;
+  z-index: 100;
+}
+
+.queue-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+
+  padding-bottom: 1rem;
+
+  border-bottom: 1px solid
+    rgba(255, 255, 255, 0.08);
+}
+
+.queue-panel-header h2 {
+  margin: 0;
+}
+
+.queue-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.queue-count {
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+.queue-clear-button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.queue-clear-button:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.queue-clear-button:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  margin-top: 0.75rem;
+
+  overflow-y: auto;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  min-width: 0;
+
+  padding: 0.5rem;
+
+  border-radius: 10px;
+}
+
+.queue-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.queue-item-active {
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.queue-item-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+
+  flex: 1;
+  min-width: 0;
+
+  padding: 0;
+
+  border: 0;
+  background: transparent;
+  color: inherit;
+
+  text-align: left;
+  cursor: pointer;
+}
+
+.queue-item-number {
+  width: 1.5rem;
+
+  flex-shrink: 0;
+
+  text-align: center;
+
+  font-size: 0.8rem;
+  opacity: 0.5;
+}
+
+.queue-item-info {
+  display: flex;
+  flex-direction: column;
+
+  min-width: 0;
+}
+
+.queue-item-title,
+.queue-item-artist {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-item-title {
+  font-weight: 500;
+}
+
+.queue-item-artist {
+  margin-top: 0.15rem;
+
+  font-size: 0.8rem;
+  opacity: 0.55;
+}
+
+.queue-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+
+  flex-shrink: 0;
+}
+
+.queue-action {
+  width: 2rem;
+  height: 2rem;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: 6px;
+
+  background: transparent;
+  color: inherit;
+
+  cursor: pointer;
+}
+
+.queue-action svg {
+  width: 1rem;
+  height: 1rem;
+
+  display: block;
+}
+
+.queue-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.queue-action:disabled {
+  cursor: default;
+  opacity: 0.2;
+}
+
+.queue-action-remove:hover:not(:disabled) {
+  background: rgba(255, 80, 80, 0.15);
+}
+
+.queue-empty {
+  margin: 1rem 0 0;
+
+  text-align: center;
+
+  font-size: 0.9rem;
+  opacity: 0.55;
+}
+
+.queue-close-button {
+  width: 2rem;
+  height: 2rem;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: 6px;
+
+  background: transparent;
+  color: inherit;
+
+  cursor: pointer;
+}
+
+.queue-close-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.queue-close-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.queue-item-number svg {
+  width: 0.9rem;
+  height: 0.9rem;
+
+  display: block;
+  margin: 0 auto;
 }
 
