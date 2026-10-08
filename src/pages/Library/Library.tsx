@@ -1,61 +1,13 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { useMusicProvider } from '../../providers/useMusicProviders'
-import type { MusicAlbum } from '../../providers/types/MusicTypes'
 
 function Library() {
   const { provider, connection } = useMusicProvider()
 
-  const [albums, setAlbums] = useState<MusicAlbum[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!provider) {
-      return
-    }
-
-    const currentProvider = provider
-    let cancelled = false
-
-    async function loadAlbums() {
-      setLoading(true)
-      setError('')
-
-      try {
-        const results = await currentProvider.getAlbums(50, 0)
-
-        if (!cancelled) {
-          setAlbums(results)
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          if (loadError instanceof Error) {
-            setError(loadError.message)
-          } else {
-            setError(
-              'Unable to load your music library.',
-            )
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    void loadAlbums()
-
-    return () => {
-      cancelled = true
-    }
-  }, [provider])
-
   if (!provider) {
     return (
-      <section>
+      <section className="library-page">
         <p className="eyebrow">LIBRARY</p>
 
         <h2>Your music</h2>
@@ -78,59 +30,83 @@ function Library() {
         Connected to {connection?.name}
       </p>
 
-      {loading && (
-        <p className="library-message">
-          Loading your library...
-        </p>
-      )}
+      <div className="library-sections">
+        <Link
+          to="/library/songs"
+          className="library-section-card"
+        >
+          <span
+            className="library-section-icon"
+            aria-hidden="true"
+          >
+            ♪
+          </span>
 
-      {error && (
-        <p className="library-error">
-          {error}
-        </p>
-      )}
+          <span className="library-section-content">
+            <strong>All Songs</strong>
+            <span>
+              Browse every song in your library
+            </span>
+          </span>
+        </Link>
 
-      {!loading && !error && albums.length === 0 && (
-        <p className="library-message">
-          No albums were found.
-        </p>
-      )}
+        <Link
+          to="/library/artists"
+          className="library-section-card"
+        >
+          <span
+            className="library-section-icon"
+            aria-hidden="true"
+          >
+            ♫
+          </span>
 
-      {albums.length > 0 && (
-        <div className="album-grid">
-          {albums.map((album) => (
-            <Link
-            className="album-card"
-            key={album.id}
-            to={`/library/album/${encodeURIComponent(album.id)}`}
-            >
-            <div className="album-art">
-                {album.coverArtUrl ? (
-                <img
-                    src={album.coverArtUrl}
-                    alt={`${album.title} cover`}
-                    loading="lazy"
-                />
-                ) : (
-                <div className="album-art-placeholder">
-                    ♪
-                </div>
-                )}
-            </div>
+          <span className="library-section-content">
+            <strong>Artists</strong>
+            <span>
+              Browse music by artist
+            </span>
+          </span>
+        </Link>
 
-            <div className="album-card-info">
-                <h3>{album.title}</h3>
+        <Link
+          to="/library/albums"
+          className="library-section-card"
+        >
+          <span
+            className="library-section-icon"
+            aria-hidden="true"
+          >
+            ▣
+          </span>
 
-                <p>{album.artistName}</p>
+          <span className="library-section-content">
+            <strong>Albums</strong>
+            <span>
+              Browse your albums
+            </span>
+          </span>
+        </Link>
 
-                {album.year && (
-                <span>{album.year}</span>
-                )}
-            </div>
-            </Link>
-          ))}
-        </div>
-      )}
+        <Link
+          to="/library/playlists"
+          className="library-section-card"
+        >
+          <span
+            className="library-section-icon"
+            aria-hidden="true"
+          >
+            ♬
+          </span>
+
+          <span className="library-section-content">
+            <strong>Playlists</strong>
+            <span>
+              Browse and manage playlists
+            </span>
+          </span>
+        </Link>
+      </div>
     </section>
   )
 }

@@ -199,6 +199,58 @@ function App() {
             path="/library"
             element={<Library />}
           />
+          
+          <Route
+            path="/library/songs"
+            element={
+              <section className="library-page">
+                <p className="eyebrow">LIBRARY</p>
+                <h2>All Songs</h2>
+                <p className="library-message">
+                  All Songs coming next.
+                </p>
+              </section>
+            }
+          />
+
+          <Route
+            path="/library/artists"
+            element={
+              <section className="library-page">
+                <p className="eyebrow">LIBRARY</p>
+                <h2>Artists</h2>
+                <p className="library-message">
+                  Artists coming next.
+                </p>
+              </section>
+            }
+          />
+
+          <Route
+            path="/library/albums"
+            element={
+              <section className="library-page">
+                <p className="eyebrow">LIBRARY</p>
+                <h2>Albums</h2>
+                <p className="library-message">
+                  Albums coming next.
+                </p>
+              </section>
+            }
+          />
+
+          <Route
+            path="/library/playlists"
+            element={
+              <section className="library-page">
+                <p className="eyebrow">LIBRARY</p>
+                <h2>Playlists</h2>
+                <p className="library-message">
+                  Playlists coming next.
+                </p>
+              </section>
+            }
+          />
 
           <Route
             path="/library/album/:albumId"
