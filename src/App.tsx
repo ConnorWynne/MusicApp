@@ -14,6 +14,7 @@ import './App.css'
 
 import Home from './pages/Home/Home'
 import Library from './pages/Library/Library'
+import Songs from './pages/Library/Songs'
 import Search from './pages/Search/Search'
 import Settings from './pages/Settings/Settings'
 import Album from './pages/Album/Album'
@@ -199,18 +200,10 @@ function App() {
             path="/library"
             element={<Library />}
           />
-          
+
           <Route
             path="/library/songs"
-            element={
-              <section className="library-page">
-                <p className="eyebrow">LIBRARY</p>
-                <h2>All Songs</h2>
-                <p className="library-message">
-                  All Songs coming next.
-                </p>
-              </section>
-            }
+            element={<Songs />}
           />
 
           <Route

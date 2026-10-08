@@ -272,6 +272,27 @@ export class NavidromeProvider implements MusicProvider {
     )
   }
 
+  async getTracks(
+  limit = 100,
+  offset = 0,
+): Promise<MusicTrack[]> {
+  const response =
+    await this.client.request<SearchResponse>(
+      'search3',
+      {
+        query: '',
+        artistCount: 0,
+        albumCount: 0,
+        songCount: limit,
+        offset,
+      },
+    )
+
+  return (response.searchResult3?.song ?? []).map(
+    (song) => this.mapTrack(song),
+  )
+}
+
   async search(
     query: string,
   ): Promise<MusicSearchResults> {

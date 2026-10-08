@@ -48,6 +48,11 @@ export interface MusicProvider {
   getAlbumTracks(albumId: string): Promise<MusicTrack[]>
 
   /**
+ * Fetch tracks from the music library.
+ */
+  getTracks(limit?: number,offset?: number,): Promise<MusicTrack[]>
+
+  /**
    * Fetch tracks belonging to an artist.
    */
   getArtistTracks(artistId: string): Promise<MusicTrack[]>

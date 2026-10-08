@@ -99,6 +99,16 @@ export class MockMusicProvider implements MusicProvider {
     return demoTracks
   }
 
+  async getTracks(
+  limit = demoTracks.length,
+  offset = 0,
+): Promise<MusicTrack[]> {
+  return demoTracks.slice(
+    offset,
+    offset + limit,
+  )
+}
+
   async search(query: string): Promise<MusicSearchResults> {
     const normalizedQuery = query.toLowerCase()
 
