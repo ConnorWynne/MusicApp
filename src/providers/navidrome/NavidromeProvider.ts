@@ -280,11 +280,13 @@ export class NavidromeProvider implements MusicProvider {
     await this.client.request<SearchResponse>(
       'search3',
       {
-        query: '',
+        query: '""',
+        artistOffset: 0,
         artistCount: 0,
+        albumOffset: 0,
         albumCount: 0,
+        songOffset: offset,
         songCount: limit,
-        offset,
       },
     )
 
