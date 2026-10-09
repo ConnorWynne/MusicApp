@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useMusicProvider } from '../../providers/useMusicProviders'
 import type { MusicTrack } from '../../providers/types/MusicTypes'
 import { usePlayer } from '../../player/usePlayer'
+import TrackMoreMenu from '../../components/playlists/TrackMoreMenu'
 
 function formatDuration(duration?: number) {
   if (!duration || duration <= 0) {
@@ -170,46 +171,45 @@ function Songs() {
             {tracks.map((track, index) => {
               const isCurrent =
                 currentTrack?.id === track.id
+              
+                  return (
+                    <div
+                      className={
+                        isCurrent
+                          ? 'song-row song-row-active'
+                          : 'song-row'
+                      }
+                      key={track.id}
+                    >
+                      <button
+                        type="button"
+                        className="song-row-play"
+                        onClick={() => {
+                          void playTrack(index)
+                        }}
+                        aria-label={`Play ${track.title}`}
+                      >
+                        <span className="song-row-number">
+                          {isCurrent && isPlaying ? '▶' : index + 1}
+                        </span>
 
-              return (
-                <button
-                  type="button"
-                  className={
-                    isCurrent
-                      ? 'song-row song-row-active'
-                      : 'song-row'
-                  }
-                  key={track.id}
-                  onClick={() => {
-                    void playTrack(index)
-                  }}
-                >
-                  <span className="song-row-number">
-                    {isCurrent && isPlaying
-                      ? '▶'
-                      : index + 1}
-                  </span>
+                        <span className="song-row-info">
+                          <strong>{track.title}</strong>
 
-                  <span className="song-row-info">
-                    <strong>
-                      {track.title}
-                    </strong>
+                          <span>
+                            {track.artistName}
+                            {track.albumName ? ` • ${track.albumName}` : ''}
+                          </span>
+                        </span>
 
-                    <span>
-                      {track.artistName}
-                      {track.albumName
-                        ? ` • ${track.albumName}`
-                        : ''}
-                    </span>
-                  </span>
+                        <span className="song-row-duration">
+                          {formatDuration(track.duration)}
+                        </span>
+                      </button>
 
-                  <span className="song-row-duration">
-                    {formatDuration(
-                      track.duration,
-                    )}
-                  </span>
-                </button>
-              )
+                      <TrackMoreMenu track={track} />
+                    </div>
+                  )
             })}
           </div>
 

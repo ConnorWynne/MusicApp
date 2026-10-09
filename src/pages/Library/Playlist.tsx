@@ -1,6 +1,7 @@
 
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import TrackMoreMenu from '../../components/playlists/TrackMoreMenu'
 
 import {
   getLocalPlaylist,
@@ -190,6 +191,8 @@ function Playlist() {
                 <span className="track-duration">
                   {formatDuration(track.duration)}
                 </span>
+
+                <TrackMoreMenu track={track}/>
 
                 <div className="playlist-track-actions">
                   <button

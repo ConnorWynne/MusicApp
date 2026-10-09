@@ -818,6 +818,79 @@ function PlayerProvider({
     )
   }
 
+  function playNextTrack(track: MusicTrack): void {
+    const currentQueue = queueRef.current
+    const currentIndex = queueIndexRef.current
+
+    // If nothing is currently selected, play this track.
+    if (currentQueue.length === 0 || currentIndex < 0) {
+      updateQueue([track], 0)
+
+      if (shuffleRef.current) {
+        shuffleOrderRef.current = [0]
+      }
+
+      void playTrackAtIndex(0, track)
+      return
+    }
+
+    // Insert immediately after the current track.
+    const insertIndex = currentIndex + 1
+    const nextQueue = [...currentQueue]
+
+    nextQueue.splice(insertIndex, 0, track)
+
+    // Keep the current track selected.
+    updateQueue(nextQueue, currentIndex)
+
+    // Adjust shuffle indexes so the new track plays next.
+    if (shuffleRef.current) {
+      const oldOrder = shuffleOrderRef.current
+      const playbackOrder =
+        oldOrder.length > 0
+          ? [...oldOrder]
+          : currentQueue.map((_, index) => index)
+
+      const adjustedOrder = playbackOrder.map((index) =>
+        index >= insertIndex ? index + 1 : index,
+      )
+
+      const currentPosition =
+        adjustedOrder.indexOf(currentIndex)
+
+      adjustedOrder.splice(
+        currentPosition >= 0
+          ? currentPosition + 1
+          : adjustedOrder.length,
+        0,
+        insertIndex,
+      )
+
+      shuffleOrderRef.current = adjustedOrder
+    }
+  }
+
+  function addToQueue(track: MusicTrack): void {
+    const currentQueue = queueRef.current
+    const newTrackIndex = currentQueue.length
+    const nextQueue = [...currentQueue, track]
+
+    // Keep the current playback position unchanged.
+    updateQueue(nextQueue, queueIndexRef.current)
+
+    // If shuffle is active, put this track at the end
+    // of the existing playback order.
+    if (shuffleRef.current) {
+      const playbackOrder =
+        shuffleOrderRef.current.length > 0
+          ? [...shuffleOrderRef.current]
+          : currentQueue.map((_, index) => index)
+
+      playbackOrder.push(newTrackIndex)
+      shuffleOrderRef.current = playbackOrder
+    }
+  }
+
   /*
    * Start playback using a complete queue.
    *
@@ -1076,32 +1149,26 @@ function PlayerProvider({
     }
   }
 
-    function toggleShuffle(): void {
-    setShuffle(
-        currentShuffle => {
-        const nextShuffle =
-            !currentShuffle
+  function toggleShuffle(): void {
+    const nextShuffle = !shuffleRef.current
 
-        if (nextShuffle) {
-            const currentIndex =
-            queueIndexRef.current
+    shuffleRef.current = nextShuffle
+    setShuffle(nextShuffle)
 
-            if (
-            queueRef.current.length > 0 &&
-            currentIndex >= 0
-            ) {
-            shuffleOrderRef.current =
-                createShuffleOrder(
-                queueRef.current.length,
-                currentIndex,
-                )
-            }
-        }
+    if (nextShuffle) {
+      const currentIndex = queueIndexRef.current
 
-        return nextShuffle
-        },
-    )
+      if (
+        queueRef.current.length > 0 &&
+        currentIndex >= 0
+      ) {
+        shuffleOrderRef.current = createShuffleOrder(
+          queueRef.current.length,
+          currentIndex,
+        )
+      }
     }
+  }
 
     const cycleRepeatMode = () => {
     setRepeatMode((current) => {
@@ -1455,6 +1522,8 @@ function PlayerProvider({
       repeatMode,
 
       play,
+      playNextTrack,
+      addToQueue,
       playQueue,
       playQueueTrack,
       removeFromQueue,
@@ -1487,6 +1556,9 @@ function PlayerProvider({
       volume,
       shuffle,
       repeatMode,
+      playNextTrack,
+      addToQueue,
+      playQueue,
       playQueueTrack,
       removeFromQueue,
       moveQueueItem,

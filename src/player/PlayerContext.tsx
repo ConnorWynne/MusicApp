@@ -28,6 +28,9 @@ export interface PlayerContextValue {
     track: MusicTrack,
   ) => Promise<void>
 
+  playNextTrack: (track: MusicTrack) => void
+  addToQueue: (track: MusicTrack) => void
+
   playQueue: (
     tracks: MusicTrack[],
     startIndex?: number,

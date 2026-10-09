@@ -1,6 +1,9 @@
-import { useState } from 'react'
+
+import { useEffect, useId, useState } from 'react'
 
 import type { MusicTrack } from '../../providers/types/MusicTypes'
+import { usePlayer } from '../../player/usePlayer'
+
 import {
   addTrackToLocalPlaylist,
   getLocalPlaylists,
@@ -9,20 +12,39 @@ import {
 
 interface TrackMoreMenuProps {
   track: MusicTrack
-  onPlayNext: () => void
-  onAddToQueue: () => void
 }
 
-function TrackMoreMenu({
-  track,
-  onPlayNext,
-  onAddToQueue,
-}: TrackMoreMenuProps) {
+function TrackMoreMenu({ track }: TrackMoreMenuProps) {
+  const { playNextTrack, addToQueue } = usePlayer()
+
   const [menuOpen, setMenuOpen] = useState(false)
-  const [playlistPickerOpen, setPlaylistPickerOpen] =
-    useState(false)
-  const [playlists, setPlaylists] =
-    useState<LocalPlaylist[]>([])
+  const [playlistPickerOpen, setPlaylistPickerOpen] = useState(false)
+  const [playlists, setPlaylists] = useState<LocalPlaylist[]>([])
+
+  const menuId = useId()
+
+  // Close this menu when another song's menu opens.
+  useEffect(() => {
+    function handleCloseOtherMenus(event: Event) {
+      const customEvent = event as CustomEvent<string>
+
+      if (customEvent.detail !== menuId) {
+        setMenuOpen(false)
+      }
+    }
+
+    window.addEventListener(
+      'musicapp:close-track-menus',
+      handleCloseOtherMenus,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'musicapp:close-track-menus',
+        handleCloseOtherMenus,
+      )
+    }
+  }, [menuId])
 
   function openPlaylistPicker() {
     setPlaylists(getLocalPlaylists())
@@ -34,12 +56,22 @@ function TrackMoreMenu({
     setPlaylists(getLocalPlaylists())
   }
 
-  function playlistContainsTrack(
-    playlist: LocalPlaylist,
-  ) {
+  function playlistContainsTrack(playlist: LocalPlaylist) {
     return playlist.tracks.some(
       (playlistTrack) => playlistTrack.id === track.id,
     )
+  }
+
+  function toggleMenu() {
+    if (!menuOpen) {
+      window.dispatchEvent(
+        new CustomEvent('musicapp:close-track-menus', {
+          detail: menuId,
+        }),
+      )
+    }
+
+    setMenuOpen((open) => !open)
   }
 
   return (
@@ -49,7 +81,7 @@ function TrackMoreMenu({
         className="track-more-button"
         aria-label={`More options for ${track.title}`}
         aria-expanded={menuOpen}
-        onClick={() => setMenuOpen((open) => !open)}
+        onClick={toggleMenu}
       >
         ⋯
       </button>
@@ -59,7 +91,7 @@ function TrackMoreMenu({
           <button
             type="button"
             onClick={() => {
-              onPlayNext()
+              playNextTrack(track)
               setMenuOpen(false)
             }}
           >
@@ -69,7 +101,7 @@ function TrackMoreMenu({
           <button
             type="button"
             onClick={() => {
-              onAddToQueue()
+              addToQueue(track)
               setMenuOpen(false)
             }}
           >
@@ -78,7 +110,10 @@ function TrackMoreMenu({
 
           <button
             type="button"
-            onClick={openPlaylistPicker}
+            onClick={() => {
+              setMenuOpen(false)
+              openPlaylistPicker()
+            }}
           >
             Add to playlist
           </button>
@@ -116,8 +151,7 @@ function TrackMoreMenu({
             ) : (
               <div className="playlist-picker-list">
                 {playlists.map((playlist) => {
-                  const alreadyAdded =
-                    playlistContainsTrack(playlist)
+                  const alreadyAdded = playlistContainsTrack(playlist)
 
                   return (
                     <div

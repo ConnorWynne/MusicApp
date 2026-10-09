@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useMusicProvider } from '../../providers/useMusicProviders'
 import type { MusicTrack } from '../../providers/types/MusicTypes'
 import { usePlayer } from '../../player/usePlayer'
+import TrackMoreMenu from '../../components/playlists/TrackMoreMenu'
 
 function formatDuration(duration?: number) {
   if (!duration || duration <= 0) {
@@ -155,41 +156,40 @@ function Artist() {
                 currentTrack?.id === track.id
 
               return (
-                <button
-                  type="button"
+                <div
                   className={
                     isCurrent
                       ? 'track-row track-row-active'
                       : 'track-row'
                   }
                   key={track.id}
-                  onClick={() => {
-                    void playTrack(index)
-                  }}
                 >
-                  <span className="track-number">
-                    {isCurrent && isPlaying
-                      ? '▶'
-                      : index + 1}
-                  </span>
-
-                  <span className="track-info">
-                    <span className="track-title">
-                      {track.title}
+                  <button
+                    type="button"
+                    className="track-row-play"
+                    onClick={() => {
+                      void playTrack(index)
+                    }}
+                    aria-label={`Play ${track.title}`}
+                  >
+                    <span className="track-number">
+                      {isCurrent && isPlaying ? '▶' : index + 1}
                     </span>
 
-                    <span className="track-artist">
-                      {track.albumName ??
-                        'Unknown Album'}
+                    <span className="track-info">
+                      <span className="track-title">{track.title}</span>
+                      <span className="track-artist">
+                        {track.albumName ?? 'Unknown Album'}
+                      </span>
                     </span>
-                  </span>
 
-                  <span className="track-duration">
-                    {formatDuration(
-                      track.duration,
-                    )}
-                  </span>
-                </button>
+                    <span className="track-duration">
+                      {formatDuration(track.duration)}
+                    </span>
+                  </button>
+
+                  <TrackMoreMenu track={track} />
+                </div>
               )
             })}
           </div>
