@@ -1,0 +1,158 @@
+import { useState } from 'react'
+
+import type { MusicTrack } from '../../providers/types/MusicTypes'
+import {
+  addTrackToLocalPlaylist,
+  getLocalPlaylists,
+  type LocalPlaylist,
+} from '../../services/playlistStorage'
+
+interface TrackMoreMenuProps {
+  track: MusicTrack
+  onPlayNext: () => void
+  onAddToQueue: () => void
+}
+
+function TrackMoreMenu({
+  track,
+  onPlayNext,
+  onAddToQueue,
+}: TrackMoreMenuProps) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [playlistPickerOpen, setPlaylistPickerOpen] =
+    useState(false)
+  const [playlists, setPlaylists] =
+    useState<LocalPlaylist[]>([])
+
+  function openPlaylistPicker() {
+    setPlaylists(getLocalPlaylists())
+    setPlaylistPickerOpen(true)
+  }
+
+  function addToPlaylist(playlistId: string) {
+    addTrackToLocalPlaylist(playlistId, track)
+    setPlaylists(getLocalPlaylists())
+  }
+
+  function playlistContainsTrack(
+    playlist: LocalPlaylist,
+  ) {
+    return playlist.tracks.some(
+      (playlistTrack) => playlistTrack.id === track.id,
+    )
+  }
+
+  return (
+    <div className="track-more-menu">
+      <button
+        type="button"
+        className="track-more-button"
+        aria-label={`More options for ${track.title}`}
+        aria-expanded={menuOpen}
+        onClick={() => setMenuOpen((open) => !open)}
+      >
+        ⋯
+      </button>
+
+      {menuOpen && (
+        <div className="track-more-dropdown">
+          <button
+            type="button"
+            onClick={() => {
+              onPlayNext()
+              setMenuOpen(false)
+            }}
+          >
+            Play next
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              onAddToQueue()
+              setMenuOpen(false)
+            }}
+          >
+            Add to queue
+          </button>
+
+          <button
+            type="button"
+            onClick={openPlaylistPicker}
+          >
+            Add to playlist
+          </button>
+        </div>
+      )}
+
+      {playlistPickerOpen && (
+        <div
+          className="playlist-picker-backdrop"
+          onClick={() => setPlaylistPickerOpen(false)}
+        >
+          <section
+            className="playlist-picker"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add to playlist"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="playlist-picker-header">
+              <h3>Playlists</h3>
+
+              <button
+                type="button"
+                aria-label="Close playlists"
+                onClick={() => setPlaylistPickerOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+
+            {playlists.length === 0 ? (
+              <p className="playlist-picker-empty">
+                No playlists yet. Create one in your Library.
+              </p>
+            ) : (
+              <div className="playlist-picker-list">
+                {playlists.map((playlist) => {
+                  const alreadyAdded =
+                    playlistContainsTrack(playlist)
+
+                  return (
+                    <div
+                      className="playlist-picker-row"
+                      key={playlist.id}
+                    >
+                      <span>{playlist.name}</span>
+
+                      <button
+                        type="button"
+                        className={
+                          alreadyAdded
+                            ? 'playlist-picker-status is-added'
+                            : 'playlist-picker-status'
+                        }
+                        aria-label={
+                          alreadyAdded
+                            ? `Already in ${playlist.name}`
+                            : `Add to ${playlist.name}`
+                        }
+                        disabled={alreadyAdded}
+                        onClick={() => addToPlaylist(playlist.id)}
+                      >
+                        {alreadyAdded ? '✓' : '+'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default TrackMoreMenu
