@@ -1,8 +1,9 @@
 
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 import type { MusicTrack } from '../../providers/types/MusicTypes'
 import { usePlayer } from '../../player/usePlayer'
+import { createPortal } from 'react-dom'
 
 import {
   addTrackToLocalPlaylist,
@@ -22,6 +23,8 @@ function TrackMoreMenu({ track }: TrackMoreMenuProps) {
   const [playlists, setPlaylists] = useState<LocalPlaylist[]>([])
 
   const menuId = useId()
+
+  const menuRef = useRef<HTMLDivElement>(null)
 
   // Close this menu when another song's menu opens.
   useEffect(() => {
@@ -45,6 +48,46 @@ function TrackMoreMenu({ track }: TrackMoreMenuProps) {
       )
     }
   }, [menuId])
+
+  
+useEffect(() => {
+  if (!menuOpen) return
+
+  function handleOutsidePointerDown(event: PointerEvent) {
+    const target = event.target
+
+    if (
+      target instanceof Node &&
+      menuRef.current &&
+      !menuRef.current.contains(target)
+    ) {
+      setMenuOpen(false)
+    }
+  }
+
+    function handleEscape(event: KeyboardEvent) {
+        if (event.key === 'Escape') {
+        setMenuOpen(false)
+        }
+    }
+
+    document.addEventListener(
+        'pointerdown',
+        handleOutsidePointerDown,
+        true,
+    )
+    document.addEventListener('keydown', handleEscape)
+
+    return () => {
+        document.removeEventListener(
+        'pointerdown',
+        handleOutsidePointerDown,
+        true,
+        )
+        document.removeEventListener('keydown', handleEscape)
+    }
+    }, [menuOpen])
+
 
   function openPlaylistPicker() {
     setPlaylists(getLocalPlaylists())
@@ -75,7 +118,7 @@ function TrackMoreMenu({ track }: TrackMoreMenuProps) {
   }
 
   return (
-    <div className="track-more-menu">
+    <div className="track-more-menu" ref={menuRef}>
       <button
         type="button"
         className="track-more-button"
@@ -120,7 +163,7 @@ function TrackMoreMenu({ track }: TrackMoreMenuProps) {
         </div>
       )}
 
-      {playlistPickerOpen && (
+      {playlistPickerOpen && createPortal(
         <div
           className="playlist-picker-backdrop"
           onClick={() => setPlaylistPickerOpen(false)}
@@ -183,7 +226,8 @@ function TrackMoreMenu({ track }: TrackMoreMenuProps) {
               </div>
             )}
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

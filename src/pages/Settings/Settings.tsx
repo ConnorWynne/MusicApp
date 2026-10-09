@@ -83,7 +83,7 @@ function Settings() {
       <h2>Music server</h2>
 
       <p>
-        Connect MusicApp to your Navidrome server.
+        Connect Resonance to your Navidrome server.
       </p>
 
       <form

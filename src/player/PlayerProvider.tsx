@@ -260,7 +260,7 @@ function PlayerProvider({
         true
     } catch (error) {
         console.error(
-        '[MusicApp] Failed to submit now-playing state:',
+        '[Resonance] Failed to submit now-playing state:',
         error,
         )
     } finally {
@@ -306,7 +306,7 @@ function PlayerProvider({
       true
   } catch (error) {
     console.error(
-      '[MusicApp] Failed to submit scrobble:',
+      '[Resonance] Failed to submit scrobble:',
       error,
     )
   } finally {
@@ -564,7 +564,7 @@ function PlayerProvider({
         )
 
       console.error(
-        '[MusicApp] Audio element error:',
+        '[Resonance] Audio element error:',
         {
           code: audio.error?.code,
           message: audio.error?.message,
@@ -791,7 +791,7 @@ function PlayerProvider({
         getPlayErrorMessage(error)
 
       console.error(
-        '[MusicApp] Playback failed:',
+        '[Resonance] Playback failed:',
         error,
       )
 
@@ -1136,7 +1136,7 @@ function PlayerProvider({
           getPlayErrorMessage(error)
 
         console.error(
-          '[MusicApp] Playback failed:',
+          '[Resonance] Playback failed:',
           error,
         )
 

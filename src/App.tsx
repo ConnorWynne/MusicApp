@@ -165,7 +165,7 @@ function App() {
             to="/"
             className="app-logo"
           >
-            MusicApp
+            Resonance
           </NavLink>
 
           <nav
@@ -254,7 +254,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <div className="mini-player">
+        {currentTrack && (<div className="mini-player">
           {isQueueOpen && (
           <QueuePanel
               onClose={() => {
@@ -515,6 +515,7 @@ function App() {
             </div>
           </div>
         </div>
+        )}
 
         <nav
           className="bottom-nav"

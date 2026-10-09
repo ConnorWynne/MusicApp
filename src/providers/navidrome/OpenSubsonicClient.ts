@@ -3,7 +3,7 @@ import { md5 } from 'js-md5'
 import { MusicProviderError } from '../types/MusicProviderError'
 
 const API_VERSION = '1.16.1'
-const CLIENT_NAME = 'MusicApp'
+const CLIENT_NAME = 'Resonance'
 
 interface SubsonicResponse {
   'subsonic-response'?: {

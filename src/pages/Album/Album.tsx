@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import TrackMoreMenu from '../../components/playlists/TrackMoreMenu'
 
 import { useMusicProvider } from '../../providers/useMusicProviders'
 import type {
@@ -188,44 +189,46 @@ function Album() {
             </p>
           )}
 
-          {tracks.length > 0 && (
+
+            {tracks.length > 0 && (
             <div className="track-list">
-              {tracks.map((track, index) => {
+                {tracks.map((track, index) => {
                 const isCurrent = currentTrack?.id === track.id
 
                 return (
-                  <button
-                    type="button"
-                    className={
-                      isCurrent
-                        ? 'track-row track-row-active'
-                        : 'track-row'
-                    }
-                    key={track.id}
-                    onClick={() => void playTrack(index)}
-                  >
-                    <span className="track-number">
-                      {isCurrent && isPlaying ? '▶' : index + 1}
-                    </span>
+                    <div className="album-track-row" key={track.id}>
+                    <button
+                        type="button"
+                        className={
+                        isCurrent
+                            ? 'track-row track-row-active'
+                            : 'track-row'
+                        }
+                        onClick={() => void playTrack(index)}
+                    >
+                        <span className="track-number">
+                        {isCurrent && isPlaying ? '▶' : index + 1}
+                        </span>
 
-                    <span className="track-info">
-                      <span className="track-title">
-                        {track.title}
-                      </span>
+                        <span className="track-info">
+                        <span className="track-title">{track.title}</span>
+                        <span className="track-artist">
+                            {track.artistName}
+                        </span>
+                        </span>
 
-                      <span className="track-artist">
-                        {track.artistName}
-                      </span>
-                    </span>
+                        <span className="track-duration">
+                        {formatDuration(track.duration)}
+                        </span>
+                    </button>
 
-                    <span className="track-duration">
-                      {formatDuration(track.duration)}
-                    </span>
-                  </button>
+                    <TrackMoreMenu track={track} />
+                    </div>
                 )
-              })}
+                })}
             </div>
-          )}
+            )}
+
         </>
       )}
     </section>
