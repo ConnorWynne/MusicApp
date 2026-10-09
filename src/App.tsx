@@ -17,6 +17,7 @@ import Library from './pages/Library/Library'
 import Songs from './pages/Library/Songs'
 import Artists from './pages/Library/Artists'
 import Artist from './pages/Library/Artist'
+import Albums from './pages/Library/Albums'
 import Search from './pages/Search/Search'
 import Settings from './pages/Settings/Settings'
 import Album from './pages/Album/Album'
@@ -220,16 +221,8 @@ function App() {
 
           <Route
             path="/library/albums"
-            element={
-              <section className="library-page">
-                <p className="eyebrow">LIBRARY</p>
-                <h2>Albums</h2>
-                <p className="library-message">
-                  Albums coming next.
-                </p>
-              </section>
-            }
-          />
+            element={<Albums />}
+            />
 
           <Route
             path="/library/playlists"
