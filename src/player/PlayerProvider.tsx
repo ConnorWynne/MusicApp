@@ -14,6 +14,10 @@ import { PlayerContext } from './PlayerContext'
 
 import type { RepeatMode, } from './PlayerContext'
 
+
+import { ResonanceNativePlayer } from './ResonanceNativePlayer'
+
+
 interface PlayerProviderProps {
   children: ReactNode
 }
@@ -305,13 +309,18 @@ function PlayerProvider({
     scrobbleSubmittedRef.current =
       true
   } catch (error) {
+    // Do not retry on every timeupdate event.
+    // A failed submission is skipped for this track.
+    scrobbleSubmittedRef.current = true
+
     console.error(
       '[Resonance] Failed to submit scrobble:',
-      error,
+      error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error),
     )
   } finally {
-    scrobbleSubmissionInFlightRef.current =
-      false
+    scrobbleSubmissionInFlightRef.current = false
   }
 }
 
@@ -564,15 +573,16 @@ function PlayerProvider({
         )
 
       console.error(
-        '[Resonance] Audio element error:',
-        {
-          code: audio.error?.code,
-          message: audio.error?.message,
-          networkState:
-            audio.networkState,
-          readyState:
-            audio.readyState,
-        },
+        '[Resonance] Audio element error: ' +
+          JSON.stringify({
+            code: audio.error?.code ?? null,
+            message: audio.error?.message ?? null,
+            networkState: audio.networkState,
+            readyState: audio.readyState,
+            paused: audio.paused,
+            currentSrcPresent: Boolean(audio.currentSrc),
+            visibilityState: document.visibilityState,
+          }),
       )
 
       setIsPlaying(false)
@@ -730,10 +740,6 @@ function PlayerProvider({
       return
     }
 
-    resetScrobbleState(
-        queueTrack.id,
-    )
-
     const requestId =
       ++playRequestRef.current
 
@@ -746,6 +752,13 @@ function PlayerProvider({
           queueTrack.id,
         )
 
+        console.info('[Resonance] Stream URL created for next track', {
+          trackId: queueTrack.id,
+          appVisibility: document.visibilityState,
+          audioReadyState: audio.readyState,
+          audioNetworkState: audio.networkState,
+        })
+
       /*
        * A different track may have been
        * requested while we waited.
@@ -756,6 +769,8 @@ function PlayerProvider({
       ) {
         return
       }
+
+      resetScrobbleState(queueTrack.id);
 
       audio.pause()
 
@@ -791,8 +806,23 @@ function PlayerProvider({
         getPlayErrorMessage(error)
 
       console.error(
-        '[Resonance] Playback failed:',
-        error,
+        '[Resonance] Playback failed: ' +
+          JSON.stringify({
+            name:
+              error instanceof Error
+                ? error.name
+                : typeof error,
+            message:
+              error instanceof Error
+                ? error.message
+                : String(error),
+            visibilityState: document.visibilityState,
+            audioPaused: audio.paused,
+            audioErrorCode: audio.error?.code ?? null,
+            audioErrorMessage: audio.error?.message ?? null,
+            audioNetworkState: audio.networkState,
+            audioReadyState: audio.readyState,
+          }),
       )
 
       setIsPlaying(false)
@@ -800,6 +830,56 @@ function PlayerProvider({
       setPlaybackError(message)
     }
   }
+
+
+  
+    async function testNativePlayback(
+      track: MusicTrack,
+    ): Promise<void> {
+      const activeProvider = providerRef.current
+
+      if (!activeProvider) {
+        setPlaybackError(
+          'Connect a music server before testing native playback.',
+        )
+        return
+      }
+
+      try {
+        setPlaybackError(null)
+        setIsLoading(true)
+
+        // Stop the existing HTML audio engine first.
+        audioRef.current?.pause()
+
+        const streamUrl = await activeProvider.getStreamUrl(track.id)
+
+        const result = await ResonanceNativePlayer.playTrack({
+          url: streamUrl,
+          title: track.title,
+          artist: track.artistName,
+          album: track.albumName,
+        })
+
+        console.info(
+          '[Resonance] Native playback request accepted:',
+          result,
+        )
+
+        setCurrentTrack(track)
+        setIsLoading(false)
+      } catch (error) {
+        console.error('[Resonance] Native playback test failed:', error)
+
+        setIsLoading(false)
+        setPlaybackError(
+          error instanceof Error
+            ? error.message
+            : 'Native playback test failed.',
+        )
+      }
+    }
+
 
   /*
    * Play one track as a one-item queue.
@@ -1522,6 +1602,7 @@ function PlayerProvider({
       repeatMode,
 
       play,
+      testNativePlayback,
       playNextTrack,
       addToQueue,
       playQueue,

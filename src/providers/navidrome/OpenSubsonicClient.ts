@@ -58,14 +58,31 @@ export class OpenSubsonicClient {
 
     let response: Response
 
+
     try {
       response = await fetch(url)
-    } catch {
+    } catch (error) {
+      console.error(
+        '[Resonance] Navidrome request failed: ' +
+          JSON.stringify({
+            endpoint,
+            errorName:
+              error instanceof Error
+                ? error.name
+                : typeof error,
+            errorMessage:
+              error instanceof Error
+                ? error.message
+                : String(error),
+          }),
+      )
+
       throw new MusicProviderError(
         'NETWORK_ERROR',
         'Unable to connect to the music server.',
       )
     }
+
 
     if (!response.ok) {
       throw new MusicProviderError(
