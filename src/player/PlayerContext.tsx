@@ -28,10 +28,6 @@ export interface PlayerContextValue {
     track: MusicTrack,
   ) => Promise<void>
 
-  
-  testNativePlayback: (track: MusicTrack) => Promise<void>
-
-
   playNextTrack: (track: MusicTrack) => void
   addToQueue: (track: MusicTrack) => void
 

@@ -19,11 +19,77 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
+import android.os.Handler;
+import android.os.Looper;
+
+import androidx.media3.common.Player;
+
 @CapacitorPlugin(name = "ResonancePlayer")
 public class ResonancePlayerPlugin extends Plugin {
 
     private ListenableFuture<MediaController> controllerFuture;
     private MediaController controller;
+
+    private MediaController observedController;
+
+    private boolean endEventSentForCurrentItem = false;
+
+    private final Handler mainHandler =
+        new Handler(Looper.getMainLooper());
+
+    private final Runnable positionUpdates = new Runnable() {
+        @Override
+        public void run() {
+            if (controller == null) {
+                return;
+            }
+
+            emitPlaybackState(null);
+
+            if (controller.isPlaying()) {
+                mainHandler.postDelayed(this, 1000);
+            }
+        }
+    };
+
+    private final Player.Listener playbackListener =
+        new Player.Listener() {
+            @Override
+            public void onEvents(
+                Player player,
+                Player.Events events
+            ) {
+                emitPlaybackState(null);
+            }
+
+            @Override
+            public void onPlayerError(
+                androidx.media3.common.PlaybackException error
+            ) {
+                emitPlaybackState(error);
+            }
+
+                        @Override
+            public void onMediaItemTransition(
+                MediaItem mediaItem,
+                int reason
+            ) {
+                endEventSentForCurrentItem = false;
+            }
+
+            @Override
+            public void onPlaybackStateChanged(int playbackState) {
+                if (
+                    playbackState == Player.STATE_ENDED
+                    && !endEventSentForCurrentItem
+                ) {
+                    endEventSentForCurrentItem = true;
+                    android.util.Log.d("ResonancePlayer", "Track ended — emitting trackEnded event");
+                    notifyListeners("trackEnded", new JSObject());
+                }
+            }
+        };
+
 
     @Override
     public void load() {
@@ -39,9 +105,22 @@ public class ResonancePlayerPlugin extends Plugin {
             new MediaController.Builder(getContext(), token)
                 .buildAsync();
 
+        ResonancePlaybackService.setNavigationListener(action -> {
+            JSObject event = new JSObject();
+            event.put(
+                "action",
+                ResonancePlaybackService.ACTION_PREVIOUS.equals(action)
+                    ? "previous"
+                    : "next"
+            );
+            android.util.Log.d("ResonancePlayer", "Emitting native navigation: " + event.getString("action"));
+            notifyListeners("nativeNavigation", event);
+        });
+
         controllerFuture.addListener(() -> {
             try {
                 controller = controllerFuture.get();
+                attachControllerListener(controller);
             } catch (Exception error) {
                 android.util.Log.e(
                     "ResonancePlayer",
@@ -78,6 +157,7 @@ public class ResonancePlayerPlugin extends Plugin {
                     .setMediaMetadata(metadata)
                     .build();
 
+            endEventSentForCurrentItem = false;        
             player.setMediaItem(item);
             player.prepare();
             player.play();
@@ -106,18 +186,41 @@ public class ResonancePlayerPlugin extends Plugin {
 
     @PluginMethod
     public void seekTo(PluginCall call) {
-        Long position = call.getLong("positionMs");
+        Integer positionValue = call.getInt("positionMs");
 
-        if (position == null || position < 0) {
+        if (positionValue == null) {
+            Double positionDouble = call.getDouble("positionMs");
+
+            if (positionDouble == null
+                    || !Double.isFinite(positionDouble)
+                    || positionDouble < 0
+                    || positionDouble > Long.MAX_VALUE) {
+                call.reject("A valid non-negative positionMs is required.");
+                return;
+            }
+
+            long position = Math.round(positionDouble);
+
+            withController(call, player -> {
+                player.seekTo(position);
+                call.resolve();
+            });
+            return;
+        }
+
+        if (positionValue < 0) {
             call.reject("A non-negative positionMs is required.");
             return;
         }
+
+        long position = positionValue.longValue();
 
         withController(call, player -> {
             player.seekTo(position);
             call.resolve();
         });
     }
+
 
     private interface ControllerAction {
         void run(MediaController player);
@@ -131,6 +234,7 @@ public class ResonancePlayerPlugin extends Plugin {
         if (controller != null) {
             ContextCompat.getMainExecutor(getContext()).execute(() -> {
                 try {
+                    attachControllerListener(controller);
                     action.run(controller);
                 } catch (Exception error) {
                     android.util.Log.e(
@@ -156,6 +260,7 @@ public class ResonancePlayerPlugin extends Plugin {
                     controllerFuture.get();
                 
                     controller = connected;
+                    attachControllerListener(controller);
 
                     try {
                         action.run(connected);
@@ -177,14 +282,85 @@ public class ResonancePlayerPlugin extends Plugin {
         }, ContextCompat.getMainExecutor(getContext()));
     }
 
+    
+    private void attachControllerListener(MediaController player) {
+        if (observedController == player) {
+            return;
+        }
+
+        if (observedController != null) {
+            observedController.removeListener(playbackListener);
+        }
+
+        observedController = player;
+        player.addListener(playbackListener);
+
+        emitPlaybackState(null);
+    }
+
+    private void emitPlaybackState(
+        androidx.media3.common.PlaybackException error
+    ) {
+        MediaController player = observedController;
+
+        if (player == null) {
+            return;
+        }
+
+        JSObject state = new JSObject();
+
+        MediaItem item = player.getCurrentMediaItem();
+        MediaMetadata metadata =
+            item != null ? item.mediaMetadata : MediaMetadata.EMPTY;
+
+        state.put("title", metadata.title != null
+            ? metadata.title.toString() : "");
+        state.put("artist", metadata.artist != null
+            ? metadata.artist.toString() : "");
+        state.put("album", metadata.albumTitle != null
+            ? metadata.albumTitle.toString() : "");
+
+        state.put("isPlaying", player.isPlaying());
+        state.put("isLoading", player.isLoading());
+        state.put("playbackState", player.getPlaybackState());
+
+        long duration = player.getDuration();
+        state.put(
+            "durationMs",
+            duration == androidx.media3.common.C.TIME_UNSET ? -1 : duration
+        );
+        state.put("positionMs", player.getCurrentPosition());
+
+        state.put(
+            "error",
+            error != null ? error.getErrorCodeName() : ""
+        );
+
+        if (player.isPlaying()) {
+            mainHandler.removeCallbacks(positionUpdates);
+            mainHandler.postDelayed(positionUpdates, 1000);
+        } else {
+            mainHandler.removeCallbacks(positionUpdates);
+        }
+        notifyListeners("playbackState", state);
+    }
+
+
     @Override
     protected void handleOnDestroy() {
+        mainHandler.removeCallbacks(positionUpdates);
+
+        if (observedController != null) {
+            observedController.removeListener(playbackListener);
+            observedController = null;
+        }
         if (controllerFuture != null) {
             MediaController.releaseFuture(controllerFuture);
             controllerFuture = null;
             controller = null;
         }
 
+        ResonancePlaybackService.setNavigationListener(null);
         super.handleOnDestroy();
     }
 }

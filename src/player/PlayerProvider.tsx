@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -12,10 +11,11 @@ import type { MusicTrack } from '../providers/types/MusicTypes'
 
 import { PlayerContext } from './PlayerContext'
 
-import type { RepeatMode, } from './PlayerContext'
+import type { RepeatMode } from './PlayerContext'
 
+import { ResonanceNativePlayer, type ResonancePlaybackState } from './ResonanceNativePlayer'
 
-import { ResonanceNativePlayer } from './ResonanceNativePlayer'
+import { Capacitor } from '@capacitor/core'
 
 
 interface PlayerProviderProps {
@@ -83,6 +83,17 @@ function PlayerProvider({
   const audioRef =
     useRef<HTMLAudioElement | null>(null)
 
+  const playTrackAtIndexRef = useRef<
+    ((index: number, track?: MusicTrack) => Promise<void>) | null
+  >(null)
+
+  const nativeTrackEndedHandlerRef =
+    useRef<(() => void) | null>(null)
+
+  const nativeNavigationHandlerRef = useRef<
+    ((action: 'next' | 'previous') => void) | null
+  >(null)
+
     function getScrobbleThreshold(
         track: MusicTrack,
         ): number {
@@ -124,6 +135,50 @@ function PlayerProvider({
   const providerRef =
     useRef(provider)
 
+  const [nativePlaybackState, setNativePlaybackState] =
+    useState<ResonancePlaybackState | null>(null)
+
+
+  useEffect(() => {
+    let cancelled = false
+    let listenerHandle:
+      | { remove: () => Promise<void> }
+      | undefined
+
+    void ResonanceNativePlayer.addListener(
+      'trackEnded',
+      () => {
+        console.log('[Resonance] Received native trackEnded event')
+
+        if (cancelled) {
+          return
+        }
+
+        console.log('[Resonance] Calling native track-ended handler')
+        nativeTrackEndedHandlerRef.current?.()
+      },
+    ).then((handle) => {
+      if (cancelled) {
+        void handle.remove()
+      } else {
+        listenerHandle = handle
+      }
+    }).catch((error) => {
+      console.error(
+        '[Resonance] Failed to subscribe to native track-ended event:',
+        error,
+      )
+    })
+
+    return () => {
+      cancelled = true
+
+      if (listenerHandle) {
+        void listenerHandle.remove()
+      }
+    }
+  }, [])
+
   /*
    * Keep the provider ref current without
    * putting provider into the audio setup effect.
@@ -131,6 +186,46 @@ function PlayerProvider({
   useEffect(() => {
     providerRef.current = provider
   }, [provider])
+
+  
+  useEffect(() => {
+    let cancelled = false
+    let listenerHandle:
+      | { remove: () => Promise<void> }
+      | undefined
+
+    void ResonanceNativePlayer.addListener(
+      'playbackState',
+      (state) => {
+        if (cancelled) {
+          return
+        }
+
+        setNativePlaybackState(state)
+      },
+    ).then((handle) => {
+      if (cancelled) {
+        void handle.remove()
+      } else {
+        listenerHandle = handle
+      }
+    }).catch((error) => {
+      console.error(
+        '[Resonance] Failed to subscribe to native playback state:',
+        error,
+      )
+    })
+
+    return () => {
+      cancelled = true
+      if (listenerHandle) {
+        void listenerHandle.remove()
+      }
+    }
+  }, [])
+
+
+
 
   const playRequestRef =
     useRef(0)
@@ -152,6 +247,8 @@ function PlayerProvider({
 
   const [duration, setDuration] =
     useState(0)
+    
+  const [nativePlaybackActive, setNativePlaybackActive] = useState(false)
 
   const [volume, setVolumeState] =
     useState(1)
@@ -184,6 +281,7 @@ function PlayerProvider({
 
     const lastAudioTimeRef =
     useRef(0)
+
 
   /*
    * Update the queue in both React state and
@@ -323,6 +421,43 @@ function PlayerProvider({
     scrobbleSubmissionInFlightRef.current = false
   }
 }
+
+  function createShuffleOrder(
+length: number,
+startIndex: number,
+): number[] {
+const remaining = Array.from(
+    { length },
+    (_, index) => index,
+).filter(
+    index => index !== startIndex,
+)
+
+for (
+    let index = remaining.length - 1;
+    index > 0;
+    index -= 1
+) {
+    const randomIndex =
+    Math.floor(
+        Math.random() * (index + 1),
+    )
+
+    const temporary =
+    remaining[index]
+
+    remaining[index] =
+    remaining[randomIndex]
+
+    remaining[randomIndex] =
+    temporary
+}
+
+    return [
+      startIndex,
+      ...remaining,
+    ]
+  }
 
   /*
    * Create the audio element once.
@@ -470,7 +605,7 @@ function PlayerProvider({
     if (
         currentRepeatMode === 'one'
     ) {
-        void playTrackAtIndex(
+        void playTrackAtIndexRef.current?.(
         currentIndex,
         )
 
@@ -505,7 +640,7 @@ function PlayerProvider({
         if (
             nextQueueIndex !== undefined
         ) {
-            void playTrackAtIndex(
+            void playTrackAtIndexRef.current?.(
             nextQueueIndex,
             )
         }
@@ -531,7 +666,7 @@ function PlayerProvider({
         if (
             nextQueueIndex !== undefined
         ) {
-            void playTrackAtIndex(
+            void playTrackAtIndexRef.current?.(
             nextQueueIndex,
             )
         }
@@ -553,7 +688,7 @@ function PlayerProvider({
         if (
         currentRepeatMode === 'all'
         ) {
-        void playTrackAtIndex(0)
+        void playTrackAtIndexRef.current?.(0)
         return
         }
 
@@ -561,7 +696,7 @@ function PlayerProvider({
         return
     }
 
-    void playTrackAtIndex(
+    void playTrackAtIndexRef.current?.(
         nextIndex,
     )
     }
@@ -770,7 +905,7 @@ function PlayerProvider({
         return
       }
 
-      resetScrobbleState(queueTrack.id);
+      resetScrobbleState(queueTrack.id)
 
       audio.pause()
 
@@ -832,53 +967,101 @@ function PlayerProvider({
   }
 
 
-  
-    async function testNativePlayback(
-      track: MusicTrack,
+  useEffect(() => {
+    playTrackAtIndexRef.current = playTrackAtIndex
+  }, [playTrackAtIndex])
+
+
+    async function playNativeTrackAtIndex(
+      index: number,
+      track?: MusicTrack,
     ): Promise<void> {
       const activeProvider = providerRef.current
+      const selectedTrack = track ?? queueRef.current[index]
 
       if (!activeProvider) {
         setPlaybackError(
-          'Connect a music server before testing native playback.',
+          'Connect a music server before playing music.',
         )
         return
       }
+
+      if (!selectedTrack) {
+        return
+      }
+
+      const requestId = ++playRequestRef.current
 
       try {
         setPlaybackError(null)
         setIsLoading(true)
 
-        // Stop the existing HTML audio engine first.
+        // Prevent HTML audio and Media3 playing together.
         audioRef.current?.pause()
 
-        const streamUrl = await activeProvider.getStreamUrl(track.id)
+        const streamUrl =
+          await activeProvider.getStreamUrl(selectedTrack.id)
 
-        const result = await ResonanceNativePlayer.playTrack({
+        if (requestId !== playRequestRef.current) {
+          return
+        }
+
+        resetScrobbleState(selectedTrack.id)
+
+        // Start synchronising React with native playback.
+        setNativePlaybackActive(true)
+
+        await ResonanceNativePlayer.playTrack({
           url: streamUrl,
-          title: track.title,
-          artist: track.artistName,
-          album: track.albumName,
+          title: selectedTrack.title,
+          artist: selectedTrack.artistName,
+          album: selectedTrack.albumName,
         })
 
-        console.info(
-          '[Resonance] Native playback request accepted:',
-          result,
-        )
+        if (requestId !== playRequestRef.current) {
+          return
+        }
 
-        setCurrentTrack(track)
+        queueIndexRef.current = index
+        setQueueIndex(index)
+        setCurrentTrack(selectedTrack)
+        setCurrentTime(0)
+        setDuration(selectedTrack.duration ?? 0)
+        setIsPlaying(true)
         setIsLoading(false)
       } catch (error) {
-        console.error('[Resonance] Native playback test failed:', error)
+        if (requestId !== playRequestRef.current) {
+          return
+        }
 
+        console.error(
+          '[Resonance] Native queue playback failed:',
+          error,
+        )
+
+        setNativePlaybackActive(false)
+        setIsPlaying(false)
         setIsLoading(false)
         setPlaybackError(
           error instanceof Error
             ? error.message
-            : 'Native playback test failed.',
+            : 'Native playback failed.',
         )
       }
     }
+
+    async function playQueueIndex(
+      index: number,
+      track?: MusicTrack,
+    ): Promise<void> {
+      if (Capacitor.isNativePlatform()) {
+        await playNativeTrackAtIndex(index, track)
+      } else {
+        await playTrackAtIndex(index, track)
+      }
+    }
+
+  
 
 
   /*
@@ -887,16 +1070,87 @@ function PlayerProvider({
    * This preserves the existing play()
    * behavior for callers that only have a track.
    */
-  async function play(
-    track: MusicTrack,
-  ): Promise<void> {
-    updateQueue([track], 0)
 
-    await playTrackAtIndex(
-      0,
-      track,
-    )
-  }
+    async function play(
+      track: MusicTrack,
+    ): Promise<void> {
+      updateQueue([track], 0)
+
+      // Use Media3 for normal single-track playback
+      // on native platforms. Keep browser playback unchanged.
+      if (Capacitor.isNativePlatform()) {
+        const requestId = ++playRequestRef.current
+
+        try {
+          setPlaybackError(null)
+          setIsLoading(true)
+
+          // Never allow HTML audio to play alongside Media3.
+          audioRef.current?.pause()
+
+          const activeProvider = providerRef.current
+
+          if (!activeProvider) {
+            throw new Error(
+              'Connect a music server before playing music.',
+            )
+          }
+
+          const streamUrl =
+            await activeProvider.getStreamUrl(track.id)
+
+          // Ignore an outdated request if another track
+          // was selected while the stream URL was loading.
+          if (requestId !== playRequestRef.current) {
+            return
+          }
+
+          resetScrobbleState(track.id)
+          setNativePlaybackActive(true)
+
+          await ResonanceNativePlayer.playTrack({
+            url: streamUrl,
+            title: track.title,
+            artist: track.artistName,
+            album: track.albumName,
+          })
+
+          if (requestId !== playRequestRef.current) {
+            return
+          }
+
+          setCurrentTrack(track)
+          setCurrentTime(0)
+          setDuration(track.duration ?? 0)
+          setIsPlaying(true)
+          setIsLoading(false)
+        } catch (error) {
+          if (requestId !== playRequestRef.current) {
+            return
+          }
+
+          console.error(
+            '[Resonance] Native single-track playback failed:',
+            error,
+          )
+
+          setNativePlaybackActive(false)
+          setIsPlaying(false)
+          setIsLoading(false)
+          setPlaybackError(
+            error instanceof Error
+              ? error.message
+              : 'Native playback failed.',
+          )
+        }
+
+        return
+      }
+
+      // Existing HTML audio playback for the web.
+      await playTrackAtIndex(0, track)
+    }
+
 
   function playNextTrack(track: MusicTrack): void {
     const currentQueue = queueRef.current
@@ -910,7 +1164,7 @@ function PlayerProvider({
         shuffleOrderRef.current = [0]
       }
 
-      void playTrackAtIndex(0, track)
+      void playQueueIndex(0, track)
       return
     }
 
@@ -1013,10 +1267,11 @@ function PlayerProvider({
       return
     }
 
-    await playTrackAtIndex(
-      safeIndex,
-      track,
-    )
+    if (Capacitor.isNativePlatform()) {
+      await playNativeTrackAtIndex(safeIndex, track)
+    } else {
+      await playTrackAtIndex(safeIndex, track)
+    }
   }
 
   async function playQueueTrack(
@@ -1031,10 +1286,11 @@ function PlayerProvider({
         return
       }
 
-      await playTrackAtIndex(
-        index,
-        track,
-      )
+    if (Capacitor.isNativePlatform()) {
+      await playNativeTrackAtIndex(index, track)
+    } else {
+      await playTrackAtIndex(index, track)
+    }
     }
 
       function removeFromQueue(
@@ -1101,7 +1357,7 @@ function PlayerProvider({
             )
 
             if (index === currentIndex && nextTrack) {
-                void playTrackAtIndex(nextIndex, nextTrack,)
+                void playQueueIndex(nextIndex, nextTrack)
             }
         }
   
@@ -1189,12 +1445,40 @@ function PlayerProvider({
         setPlaybackError(null)
     }
 
-  function pause() {
-    audioRef.current?.pause()
-    setIsLoading(false)
-  }
+
+    function pause() {
+      if (nativePlaybackActive) {
+        void ResonanceNativePlayer.pause().catch((error) => {
+          console.error('[Resonance] Native pause failed:', error)
+          setPlaybackError('Unable to pause native playback.')
+        })
+        return
+      }
+
+      audioRef.current?.pause()
+      setIsLoading(false)
+    }
+
 
   async function togglePlayPause() {
+    
+    if (nativePlaybackActive) {
+      try {
+        setPlaybackError(null)
+
+        if (nativePlaybackState?.isPlaying) {
+          await ResonanceNativePlayer.pause()
+        } else {
+          await ResonanceNativePlayer.resume()
+        }
+      } catch (error) {
+        console.error('[Resonance] Native play/pause failed:', error)
+        setPlaybackError('Unable to change native playback state.')
+      }
+
+      return
+    }
+
     const audio =
       audioRef.current
 
@@ -1268,42 +1552,7 @@ function PlayerProvider({
     })
     }
 
-        function createShuffleOrder(
-        length: number,
-        startIndex: number,
-        ): number[] {
-        const remaining = Array.from(
-            { length },
-            (_, index) => index,
-        ).filter(
-            index => index !== startIndex,
-        )
 
-        for (
-            let index = remaining.length - 1;
-            index > 0;
-            index -= 1
-        ) {
-            const randomIndex =
-            Math.floor(
-                Math.random() * (index + 1),
-            )
-
-            const temporary =
-            remaining[index]
-
-            remaining[index] =
-            remaining[randomIndex]
-
-            remaining[randomIndex] =
-            temporary
-        }
-
-        return [
-            startIndex,
-            ...remaining,
-        ]
-        }
 
         async function next(): Promise<void> {
         const currentQueue =
@@ -1329,7 +1578,7 @@ function PlayerProvider({
             ]
 
             if (currentTrack) {
-            await playTrackAtIndex(
+            await playQueueIndex(
                 queueIndexRef.current,
                 currentTrack,
             )
@@ -1359,7 +1608,7 @@ function PlayerProvider({
                 currentQueue[nextQueueIndex]
 
             if (nextTrack) {
-                await playTrackAtIndex(
+                await playQueueIndex(
                 nextQueueIndex,
                 nextTrack,
                 )
@@ -1391,7 +1640,7 @@ function PlayerProvider({
                 const nextTrack =
                 currentQueue[nextQueueIndex]
 
-                await playTrackAtIndex(
+                await playQueueIndex(
                 nextQueueIndex,
                 nextTrack,
                 )
@@ -1401,7 +1650,7 @@ function PlayerProvider({
                 currentQueue[0]
 
             if (firstTrack) {
-                await playTrackAtIndex(
+                await playQueueIndex(
                 0,
                 firstTrack,
                 )
@@ -1409,6 +1658,60 @@ function PlayerProvider({
             }
         }
         }
+
+      useEffect(() => {
+        nativeTrackEndedHandlerRef.current = () => {
+          console.log('[Resonance] Native track ended — advancing queue')
+          void next()
+        }
+
+        nativeNavigationHandlerRef.current = (action) => {
+          if (action === 'next') {
+            void next()
+          } else {
+            void previous()
+          }
+        }
+      })
+
+      useEffect(() => {
+        let cancelled = false
+        let listenerHandle:
+          | { remove: () => Promise<void> }
+          | undefined
+
+        void ResonanceNativePlayer.addListener(
+          'nativeNavigation',
+          (event) => {
+            if (cancelled) {
+              return
+            }
+            console.log('[Resonance] Native navigation received:', event.action);
+            nativeNavigationHandlerRef.current?.(event.action)
+          },
+        ).then((handle) => {
+          if (cancelled) {
+            void handle.remove()
+          } else {
+            listenerHandle = handle
+          }
+        }).catch((error) => {
+          console.error(
+            '[Resonance] Failed to subscribe to native navigation:',
+            error,
+          )
+        })
+
+        return () => {
+          cancelled = true
+
+          if (listenerHandle) {
+            void listenerHandle.remove()
+          }
+        }
+      }, [])
+
+
 
     function getPlaybackOrder(): number[] {
         if (!shuffle) {
@@ -1420,49 +1723,6 @@ function PlayerProvider({
         return shuffleOrderRef.current
         }
 
-    function getCanGoPrevious(): boolean {
-        if (queueRef.current.length === 0) {
-            return false
-        }
-
-        if (repeatMode === 'all') {
-            return true
-        }
-
-        const playbackOrder =
-            getPlaybackOrder()
-
-        const playbackPosition =
-            playbackOrder.indexOf(
-            queueIndexRef.current,
-            )
-
-        return playbackPosition > 0
-        }
-
-        function getCanGoNext(): boolean {
-        if (queueRef.current.length === 0) {
-            return false
-        }
-
-        if (repeatMode === 'all') {
-            return true
-        }
-
-        const playbackOrder =
-            getPlaybackOrder()
-
-        const playbackPosition =
-            playbackOrder.indexOf(
-            queueIndexRef.current,
-            )
-
-        return (
-            playbackPosition >= 0 &&
-            playbackPosition <
-            playbackOrder.length - 1
-        )
-        }
 
         async function previous(): Promise<void> {
         const currentQueue =
@@ -1496,7 +1756,7 @@ function PlayerProvider({
                 ]
 
                 if (previousTrack) {
-                await playTrackAtIndex(
+                await playQueueIndex(
                     previousQueueIndex,
                     previousTrack,
                 )
@@ -1522,7 +1782,7 @@ function PlayerProvider({
             currentQueue[previousQueueIndex]
 
             if (previousTrack) {
-            await playTrackAtIndex(
+            await playQueueIndex(
                 previousQueueIndex,
                 previousTrack,
             )
@@ -1530,30 +1790,62 @@ function PlayerProvider({
         }
         }
 
-  function seek(time: number) {
-    const audio =
-      audioRef.current
+      function seek(time: number) {
+        if (nativePlaybackActive) {
+          if (!Number.isFinite(time)) {
+            console.warn('[Resonance] Ignoring invalid native seek time:', time)
+            return
+          }
 
-    if (!audio) {
-      return
-    }
+          const nextTime = Math.max(
+            0,
+            Math.min(time, duration > 0 ? duration : time),
+          )
 
-    const nextTime =
-      Math.max(
-        0,
-        Math.min(
-          time,
-          audio.duration || time,
-        ),
-      )
+          const positionMs = Math.round(nextTime * 1000)
 
-    audio.currentTime =
-      nextTime
+          if (!Number.isFinite(positionMs) || positionMs < 0) {
+            console.warn('[Resonance] Ignoring invalid native seek position:', positionMs)
+            return
+          }
 
-    setCurrentTime(
-      nextTime,
-    )
-  }
+          console.log('[Resonance] Seek request:', {
+            timeSeconds: time,
+            durationSeconds: duration,
+            nextTimeSeconds: nextTime,
+            positionMs,
+            positionMsType: typeof positionMs,
+          })
+
+          void ResonanceNativePlayer.seekTo({ positionMs })
+            .then(() => {
+              setCurrentTime(nextTime)
+              setPlaybackError(null)
+            })
+            .catch((error) => {
+              console.error('[Resonance] Native seek failed:', error)
+              setPlaybackError('Unable to seek in native playback.')
+            })
+
+          return
+        }
+
+        const audio = audioRef.current
+
+        if (!audio || !Number.isFinite(time)) {
+          return
+        }
+
+        const nextTime = Math.max(
+          0,
+          Math.min(time, Number.isFinite(audio.duration) && audio.duration > 0
+            ? audio.duration
+            : time),
+        )
+
+        audio.currentTime = nextTime
+        setCurrentTime(nextTime)
+      }
 
   function setVolume(
     volumeValue: number,
@@ -1581,73 +1873,64 @@ function PlayerProvider({
     setPlaybackError(null)
   }
 
-  const value = useMemo(
-    () => ({
-      currentTrack,
-      queue,
-      queueIndex,
+  const canGoPrevious =
+    queue.length > 0 &&
+    (repeatMode === 'all' || queueIndex > 0)
 
-      canGoNext: getCanGoNext(),
-      canGoPrevious: getCanGoPrevious(),
+  const canGoNext =
+    queue.length > 0 &&
+    (repeatMode === 'all' || (queueIndex >= 0 && queueIndex < queue.length - 1))
 
-      isPlaying,
-      isLoading,
-      playbackError,
+  const nativeState = nativePlaybackActive ? nativePlaybackState : null
 
-      currentTime,
-      duration,
-      volume,
+  const value = {
+    currentTrack,
+    queue,
+    queueIndex,
 
-      shuffle,
-      repeatMode,
+    canGoNext,
+    canGoPrevious,
 
-      play,
-      testNativePlayback,
-      playNextTrack,
-      addToQueue,
-      playQueue,
-      playQueueTrack,
-      removeFromQueue,
-      moveQueueItem,
-      clearQueue,
+    isPlaying: nativeState?.isPlaying ?? isPlaying,
+    isLoading: nativeState?.isLoading ?? isLoading,
+    playbackError: nativeState?.error
+      ? `Native playback failed: ${nativeState.error}`
+      : playbackError,
 
-      pause,
-      togglePlayPause,
+    currentTime: nativeState
+      ? Math.max(0, nativeState.positionMs) / 1000
+      : currentTime,
+    duration: nativeState && nativeState.durationMs >= 0
+      ? nativeState.durationMs / 1000
+      : duration,
+    volume,
 
-      next,
-      previous,
+    shuffle,
+    repeatMode,
 
-      seek,
-      setVolume,
+    play,
+    playNextTrack,
+    addToQueue,
+    playQueue,
+    playQueueTrack,
+    removeFromQueue,
+    moveQueueItem,
+    clearQueue,
 
-      toggleShuffle,
-      cycleRepeatMode,
+    pause,
+    togglePlayPause,
 
-      clearPlaybackError,
-    }),
-    [
-      currentTrack,
-      queue,
-      queueIndex,
-      isPlaying,
-      isLoading,
-      playbackError,
-      currentTime,
-      duration,
-      volume,
-      shuffle,
-      repeatMode,
-      playNextTrack,
-      addToQueue,
-      playQueue,
-      playQueueTrack,
-      removeFromQueue,
-      moveQueueItem,
-      clearQueue,
-      toggleShuffle,
-      cycleRepeatMode,
-    ],
-  )
+    next,
+    previous,
+
+    seek,
+    setVolume,
+
+    toggleShuffle,
+    cycleRepeatMode,
+
+    clearPlaybackError,
+  }
 
   return (
     <PlayerContext.Provider

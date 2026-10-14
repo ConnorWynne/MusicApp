@@ -4,7 +4,6 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { MusicTrack } from '../../providers/types/MusicTypes'
 import { usePlayer } from '../../player/usePlayer'
 import { createPortal } from 'react-dom'
-import { Capacitor } from '@capacitor/core'
 
 import {
   addTrackToLocalPlaylist,
@@ -17,7 +16,7 @@ interface TrackMoreMenuProps {
 }
 
 function TrackMoreMenu({ track }: TrackMoreMenuProps) {
-  const { playNextTrack, addToQueue, testNativePlayback, } = usePlayer()
+  const { playNextTrack, addToQueue, } = usePlayer()
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [playlistPickerOpen, setPlaylistPickerOpen] = useState(false)
@@ -132,18 +131,6 @@ useEffect(() => {
 
       {menuOpen && (
         <div className="track-more-dropdown">
-        
-          {Capacitor.isNativePlatform() && (
-            <button
-              type="button"
-              onClick={async () => {
-                setMenuOpen(false)
-                await testNativePlayback(track)
-              }}
-            >
-              Test native playback (temporary)
-            </button>
-          )}
 
           <button
             type="button"
