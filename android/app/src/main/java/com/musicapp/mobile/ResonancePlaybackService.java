@@ -18,6 +18,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import androidx.media3.common.Player;
+
 public class ResonancePlaybackService extends MediaSessionService {
 
     public static final String ACTION_PREVIOUS = "com.musicapp.mobile.PREVIOUS";
@@ -66,13 +68,21 @@ public class ResonancePlaybackService extends MediaSessionService {
             ) {
                 String action = customCommand.customAction;
 
-                if (ACTION_PREVIOUS.equals(action) || ACTION_NEXT.equals(action)) {
-                    NavigationListener listener = navigationListener;
 
-                    if (listener != null) {
-                        listener.onNavigationRequested(action);
+                if (ACTION_NEXT.equals(action)) {
+                    session.getPlayer().seekToNextMediaItem();
+                } else if (ACTION_PREVIOUS.equals(action)) {
+                    Player player = session.getPlayer();
+
+                    // Restart the current track if it has played
+                    // for more than three seconds.
+                    if (player.getCurrentPosition() > 3000) {
+                        player.seekTo(0);
+                    } else {
+                        player.seekToPreviousMediaItem();
                     }
                 }
+
 
                 return Futures.immediateFuture(
                     new SessionResult(SessionResult.RESULT_SUCCESS)

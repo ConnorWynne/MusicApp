@@ -103,11 +103,11 @@ interface SearchResponse {
   }
 }
 
-interface NowPlayingResponse {
-  nowPlaying?: {
-    entry?: NavidromeSong[]
-  }
-}
+ //interface NowPlayingResponse {
+ //nowPlaying?: {
+    //entry?: NavidromeSong[]
+  //}
+//}
 
 interface LyricsResponse {
   lyricsList?: {
@@ -175,18 +175,39 @@ export class NavidromeProvider implements MusicProvider {
     )
   }
 
-  async getRecentlyPlayedTracks(
-    limit = 20,
-  ): Promise<MusicTrack[]> {
-    const response =
-      await this.client.request<NowPlayingResponse>(
-        'getNowPlaying',
+    async getRecentlyPlayedTracks(
+      limit = 20,
+    ): Promise<MusicTrack[]> {
+      const response = await this.client.request<AlbumsResponse>(
+        'getAlbumList2',
+        {
+          type: 'recent',
+          size: limit,
+          offset: 0,
+        },
       )
 
-    return (response.nowPlaying?.entry ?? [])
-      .slice(0, limit)
-      .map((song) => this.mapTrack(song))
-  }
+      const albums = response.albumList2?.album ?? []
+
+      const albumResponses = await Promise.all(
+        albums.map((album) =>
+          this.client.request<AlbumSongsResponse>(
+            'getAlbum',
+            { id: album.id },
+          ),
+        ),
+      )
+
+      const tracks = albumResponses.flatMap(
+        (albumResponse) => albumResponse.album?.song ?? [],
+      )
+
+      return tracks
+        .slice(0, limit)
+        .map((song) => this.mapTrack(song))
+    }
+
+
 
     async getArtists(): Promise<MusicArtist[]> {
     const response =

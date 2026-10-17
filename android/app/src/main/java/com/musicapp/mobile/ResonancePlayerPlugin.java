@@ -24,6 +24,12 @@ import android.os.Looper;
 
 import androidx.media3.common.Player;
 
+import com.getcapacitor.JSArray;
+import org.json.JSONObject;
+import org.json.JSONException;
+import java.util.ArrayList;
+import java.util.List;
+
 @CapacitorPlugin(name = "ResonancePlayer")
 public class ResonancePlayerPlugin extends Plugin {
 
@@ -84,7 +90,7 @@ public class ResonancePlayerPlugin extends Plugin {
                     && !endEventSentForCurrentItem
                 ) {
                     endEventSentForCurrentItem = true;
-                    android.util.Log.d("ResonancePlayer", "Track ended — emitting trackEnded event");
+                    //android.util.Log.d("ResonancePlayer", "Track ended — emitting trackEnded event");
                     notifyListeners("trackEnded", new JSObject());
                 }
             }
@@ -105,17 +111,6 @@ public class ResonancePlayerPlugin extends Plugin {
             new MediaController.Builder(getContext(), token)
                 .buildAsync();
 
-        ResonancePlaybackService.setNavigationListener(action -> {
-            JSObject event = new JSObject();
-            event.put(
-                "action",
-                ResonancePlaybackService.ACTION_PREVIOUS.equals(action)
-                    ? "previous"
-                    : "next"
-            );
-            android.util.Log.d("ResonancePlayer", "Emitting native navigation: " + event.getString("action"));
-            notifyListeners("nativeNavigation", event);
-        });
 
         controllerFuture.addListener(() -> {
             try {
@@ -168,6 +163,210 @@ public class ResonancePlayerPlugin extends Plugin {
         });
     }
 
+    
+        @PluginMethod
+        public void setQueue(PluginCall call) {
+            JSArray tracks = call.getArray("tracks");
+            Integer startIndexValue = call.getInt("startIndex");
+
+            if (tracks == null || tracks.length() == 0) {
+                call.reject("The queue must contain at least one track.");
+                return;
+            }
+
+            if (startIndexValue == null
+                    || startIndexValue < 0
+                    || startIndexValue >= tracks.length()) {
+                call.reject("A valid startIndex is required.");
+                return;
+            }
+
+            final int startIndex = startIndexValue;
+            final List<MediaItem> mediaItems = new ArrayList<>();
+
+            try {
+                for (int i = 0; i < tracks.length(); i++) {
+                    JSONObject track = tracks.getJSONObject(i);
+
+                    String id = track.optString("id", "");
+                    String url = track.optString("url", "");
+                    String title = track.optString("title", "Unknown track");
+                    String artist = track.optString("artist", "Unknown artist");
+                    String album = track.optString("album", "");
+
+                    if (id.isEmpty() || url.trim().isEmpty()) {
+                        call.reject(
+                            "Every queue track must have an ID and stream URL."
+                        );
+                        return;
+                    }
+
+                    MediaMetadata metadata =
+                        new MediaMetadata.Builder()
+                            .setTitle(title)
+                            .setArtist(artist)
+                            .setAlbumTitle(album)
+                            .build();
+
+                    MediaItem item =
+                        new MediaItem.Builder()
+                            .setMediaId(id)
+                            .setUri(url)
+                            .setMediaMetadata(metadata)
+                            .build();
+
+                    mediaItems.add(item);
+                }
+            } catch (JSONException error) {
+                call.reject("Unable to read the queue tracks.", error);
+                return;
+            }
+
+            withController(call, player -> {
+                endEventSentForCurrentItem = false;
+
+                player.setMediaItems(mediaItems, startIndex, 0L);
+                player.prepare();
+                player.play();
+
+                JSObject result = new JSObject();
+                result.put("accepted", true);
+                call.resolve(result);
+            });
+        }
+
+            @PluginMethod
+                public void updateQueue(PluginCall call) {
+                    JSArray tracks = call.getArray("tracks");
+
+                    if (tracks == null) {
+                        call.reject("The updated queue tracks are required.");
+                        return;
+                    }
+
+                    if (tracks.length() == 0) {
+                        withController(call, player -> {
+                            endEventSentForCurrentItem = false;
+                            player.pause();
+                            player.clearMediaItems();
+                            JSObject result = new JSObject();
+                            result.put("accepted", true);
+                            call.resolve(result);
+                        });
+                        return;
+                    }
+
+                    final List<MediaItem> mediaItems = new ArrayList<>();
+
+                    try {
+                        for (int i = 0; i < tracks.length(); i++) {
+                            JSONObject track = tracks.getJSONObject(i);
+
+                            String id = track.optString("id", "");
+                            String url = track.optString("url", "");
+                            String title = track.optString("title", "Unknown track");
+                            String artist = track.optString("artist", "Unknown artist");
+                            String album = track.optString("album", "");
+
+                            if (id.isEmpty() || url.trim().isEmpty()) {
+                                call.reject(
+                                    "Every queue track must have an ID and stream URL."
+                                );
+                                return;
+                            }
+
+                            MediaMetadata metadata = new MediaMetadata.Builder()
+                                .setTitle(title)
+                                .setArtist(artist)
+                                .setAlbumTitle(album)
+                                .build();
+
+                            MediaItem item = new MediaItem.Builder()
+                                .setMediaId(id)
+                                .setUri(url)
+                                .setMediaMetadata(metadata)
+                                .build();
+
+                            mediaItems.add(item);
+                        }
+                    } catch (JSONException error) {
+                        call.reject("Unable to read the updated queue.", error);
+                        return;
+                    }
+
+                    withController(call, player -> {
+                        MediaItem currentItem = player.getCurrentMediaItem();
+                        String currentMediaId =
+                            currentItem != null ? currentItem.mediaId : "";
+
+                        long currentPosition = Math.max(0L, player.getCurrentPosition());
+                        boolean wasPlaying = player.isPlaying();
+                        int previousState = player.getPlaybackState();
+
+                        int preservedIndex = -1;
+
+                        if (!currentMediaId.isEmpty()) {
+                            for (int i = 0; i < mediaItems.size(); i++) {
+                                if (currentMediaId.equals(mediaItems.get(i).mediaId)) {
+                                    preservedIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (preservedIndex >= 0) {
+                            player.setMediaItems(mediaItems, preservedIndex, currentPosition);
+                        } else {
+                            int requestedStartIndex = call.getInt("startIndex", 0);
+                            int fallbackIndex = Math.max(
+                                0,
+                                Math.min(requestedStartIndex, mediaItems.size() - 1)
+                            );
+
+                            player.setMediaItems(mediaItems, fallbackIndex, 0L);
+                        }
+
+                        player.prepare();
+
+                        if (wasPlaying || previousState == Player.STATE_ENDED) {
+                            player.play();
+                        } else {
+                            player.pause();
+                        }
+
+                        JSObject result = new JSObject();
+                        result.put("accepted", true);
+                        call.resolve(result);
+                    });
+                }
+
+
+    @PluginMethod
+    public void setPlaybackModes(PluginCall call) {
+        String repeatMode = call.getString("repeatMode", "off");
+        Boolean shuffleEnabled = call.getBoolean("shuffleEnabled", false);
+
+        final int nativeRepeatMode;
+        if ("all".equals(repeatMode)) {
+            nativeRepeatMode = Player.REPEAT_MODE_ALL;
+        } else if ("one".equals(repeatMode)) {
+            nativeRepeatMode = Player.REPEAT_MODE_ONE;
+        } else if ("off".equals(repeatMode)) {
+            nativeRepeatMode = Player.REPEAT_MODE_OFF;
+        } else {
+            call.reject("repeatMode must be off, all, or one.");
+            return;
+        }
+
+        withController(call, player -> {
+            player.setRepeatMode(nativeRepeatMode);
+            player.setShuffleModeEnabled(Boolean.TRUE.equals(shuffleEnabled));
+            JSObject result = new JSObject();
+            result.put("accepted", true);
+            call.resolve(result);
+        });
+    }
+
     @PluginMethod
     public void pause(PluginCall call) {
         withController(call, player -> {
@@ -183,6 +382,32 @@ public class ResonancePlayerPlugin extends Plugin {
             call.resolve();
         });
     }
+
+        
+    @PluginMethod
+    public void skipToNext(PluginCall call) {
+        withController(call, player -> {
+            if (player.hasNextMediaItem()) {
+                player.seekToNextMediaItem();
+            }
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void skipToPrevious(PluginCall call) {
+        withController(call, player -> {
+            if (player.getCurrentPosition() > 3000L) {
+                player.seekTo(0L);
+            } else if (player.hasPreviousMediaItem()) {
+                player.seekToPreviousMediaItem();
+            } else {
+                player.seekTo(0L);
+            }
+            call.resolve();
+        });
+    }
+
 
     @PluginMethod
     public void seekTo(PluginCall call) {
@@ -312,6 +537,12 @@ public class ResonancePlayerPlugin extends Plugin {
         MediaItem item = player.getCurrentMediaItem();
         MediaMetadata metadata =
             item != null ? item.mediaMetadata : MediaMetadata.EMPTY;
+
+        if (item != null) {
+            state.put("mediaId", item.mediaId);
+        } else {
+            state.put("mediaId", "");
+        }
 
         state.put("title", metadata.title != null
             ? metadata.title.toString() : "");

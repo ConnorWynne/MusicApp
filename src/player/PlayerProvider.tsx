@@ -17,6 +17,8 @@ import { ResonanceNativePlayer, type ResonancePlaybackState } from './ResonanceN
 
 import { Capacitor } from '@capacitor/core'
 
+import { recordTrackPlayed } from '../services/listeningHistory'
+
 
 interface PlayerProviderProps {
   children: ReactNode
@@ -194,16 +196,56 @@ function PlayerProvider({
       | { remove: () => Promise<void> }
       | undefined
 
-    void ResonanceNativePlayer.addListener(
-      'playbackState',
-      (state) => {
-        if (cancelled) {
-          return
-        }
+  void ResonanceNativePlayer.addListener(
+    'playbackState',
+    (state) => {
+      if (cancelled) {
+        return
+      }
 
-        setNativePlaybackState(state)
-      },
-    ).then((handle) => {
+      setNativePlaybackState(state)
+
+      if (!state.mediaId) {
+        return
+      }
+
+      const currentQueue = queueRef.current
+      const nextIndex = currentQueue.findIndex(
+        (track) => track.id === state.mediaId,
+      )
+
+      if (nextIndex < 0) {
+        return
+      }
+
+      const nextTrack = currentQueue[nextIndex]
+      if (!nextTrack) {
+        return
+      }
+
+      const previousTrackId =
+        currentQueue[queueIndexRef.current]?.id
+
+      if (previousTrackId !== state.mediaId) {
+        queueIndexRef.current = nextIndex
+        setQueueIndex(nextIndex)
+        setCurrentTrack(nextTrack)
+        setCurrentTime(0)
+        setDuration(nextTrack.duration ?? 0)
+
+        resetScrobbleState(nextTrack.id)
+
+        void providerRef.current
+          ?.scrobble(nextTrack.id, false)
+          .catch((error) => {
+            console.error(
+              '[Resonance] Failed to submit now-playing state:',
+              error,
+            )
+          })
+      }
+    },
+  ).then((handle) => {
       if (cancelled) {
         void handle.remove()
       } else {
@@ -842,6 +884,7 @@ for (
    * This is kept separate from playQueue()
    * so the ended event can use it.
    */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   async function playTrackAtIndex(
     index: number,
     track?: MusicTrack,
@@ -925,6 +968,8 @@ for (
 
       await audio.play()
 
+      recordTrackPlayed(queueTrack)
+
       void submitNowPlaying(
         queueTrack.id,
       )
@@ -972,96 +1017,26 @@ for (
   }, [playTrackAtIndex])
 
 
-    async function playNativeTrackAtIndex(
-      index: number,
-      track?: MusicTrack,
-    ): Promise<void> {
-      const activeProvider = providerRef.current
-      const selectedTrack = track ?? queueRef.current[index]
-
-      if (!activeProvider) {
-        setPlaybackError(
-          'Connect a music server before playing music.',
-        )
-        return
-      }
-
-      if (!selectedTrack) {
-        return
-      }
-
-      const requestId = ++playRequestRef.current
-
-      try {
-        setPlaybackError(null)
-        setIsLoading(true)
-
-        // Prevent HTML audio and Media3 playing together.
-        audioRef.current?.pause()
-
-        const streamUrl =
-          await activeProvider.getStreamUrl(selectedTrack.id)
-
-        if (requestId !== playRequestRef.current) {
-          return
-        }
-
-        resetScrobbleState(selectedTrack.id)
-
-        // Start synchronising React with native playback.
-        setNativePlaybackActive(true)
-
-        await ResonanceNativePlayer.playTrack({
-          url: streamUrl,
-          title: selectedTrack.title,
-          artist: selectedTrack.artistName,
-          album: selectedTrack.albumName,
-        })
-
-        if (requestId !== playRequestRef.current) {
-          return
-        }
-
-        queueIndexRef.current = index
-        setQueueIndex(index)
-        setCurrentTrack(selectedTrack)
-        setCurrentTime(0)
-        setDuration(selectedTrack.duration ?? 0)
-        setIsPlaying(true)
-        setIsLoading(false)
-      } catch (error) {
-        if (requestId !== playRequestRef.current) {
-          return
-        }
-
-        console.error(
-          '[Resonance] Native queue playback failed:',
-          error,
-        )
-
-        setNativePlaybackActive(false)
-        setIsPlaying(false)
-        setIsLoading(false)
-        setPlaybackError(
-          error instanceof Error
-            ? error.message
-            : 'Native playback failed.',
-        )
-      }
-    }
-
     async function playQueueIndex(
       index: number,
       track?: MusicTrack,
     ): Promise<void> {
+      const currentQueue = queueRef.current
+      const selectedTrack = track ?? currentQueue[index]
+
+      if (!selectedTrack || index < 0 || index >= currentQueue.length) {
+        return
+      }
+
       if (Capacitor.isNativePlatform()) {
-        await playNativeTrackAtIndex(index, track)
+        // Rebuild the complete Media3 playlist at the requested index.
+        // Do not use playTrack(): it replaces the native playlist with one item,
+        // breaking automatic advancement and native Previous/Next controls.
+        await playQueue(currentQueue, index)
       } else {
-        await playTrackAtIndex(index, track)
+        await playTrackAtIndex(index, selectedTrack)
       }
     }
-
-  
 
 
   /*
@@ -1124,6 +1099,7 @@ for (
           setDuration(track.duration ?? 0)
           setIsPlaying(true)
           setIsLoading(false)
+          recordTrackPlayed(track)
         } catch (error) {
           if (requestId !== playRequestRef.current) {
             return
@@ -1151,79 +1127,124 @@ for (
       await playTrackAtIndex(0, track)
     }
 
+      async function syncNativeQueue(
+        tracks: MusicTrack[],
+        startIndex: number,
+      ): Promise<void> {
+        if (!Capacitor.isNativePlatform()) {
+          return
+        }
 
-  function playNextTrack(track: MusicTrack): void {
-    const currentQueue = queueRef.current
-    const currentIndex = queueIndexRef.current
+        const activeProvider = providerRef.current
 
-    // If nothing is currently selected, play this track.
-    if (currentQueue.length === 0 || currentIndex < 0) {
-      updateQueue([track], 0)
+        if (!activeProvider) {
+          return
+        }
 
-      if (shuffleRef.current) {
-        shuffleOrderRef.current = [0]
+        const safeIndex = tracks.length === 0
+          ? 0
+          : Math.max(0, Math.min(startIndex, tracks.length - 1))
+
+        const nativeTracks = await Promise.all(
+          tracks.map(async (track) => ({
+            id: track.id,
+            url: await activeProvider.getStreamUrl(track.id),
+            title: track.title,
+            artist: track.artistName,
+            album: track.albumName,
+          })),
+        )
+
+        await ResonanceNativePlayer.updateQueue({
+          tracks: nativeTracks,
+          startIndex: safeIndex,
+        })
       }
 
-      void playQueueIndex(0, track)
-      return
-    }
+      function playNextTrack(track: MusicTrack): void {
+        const currentQueue = queueRef.current
+        const currentIndex = queueIndexRef.current
 
-    // Insert immediately after the current track.
-    const insertIndex = currentIndex + 1
-    const nextQueue = [...currentQueue]
+        if (currentQueue.length === 0 || currentIndex < 0) {
+          updateQueue([track], 0)
 
-    nextQueue.splice(insertIndex, 0, track)
+          if (shuffleRef.current) {
+            shuffleOrderRef.current = [0]
+          }
 
-    // Keep the current track selected.
-    updateQueue(nextQueue, currentIndex)
+          void playQueue([track], 0)
+          return
+        }
 
-    // Adjust shuffle indexes so the new track plays next.
-    if (shuffleRef.current) {
-      const oldOrder = shuffleOrderRef.current
-      const playbackOrder =
-        oldOrder.length > 0
-          ? [...oldOrder]
-          : currentQueue.map((_, index) => index)
+        const insertIndex = currentIndex + 1
+        const nextQueue = [...currentQueue]
 
-      const adjustedOrder = playbackOrder.map((index) =>
-        index >= insertIndex ? index + 1 : index,
-      )
+        nextQueue.splice(insertIndex, 0, track)
 
-      const currentPosition =
-        adjustedOrder.indexOf(currentIndex)
+        updateQueue(nextQueue, currentIndex)
 
-      adjustedOrder.splice(
-        currentPosition >= 0
-          ? currentPosition + 1
-          : adjustedOrder.length,
-        0,
-        insertIndex,
-      )
+        if (shuffleRef.current) {
+          const oldOrder = shuffleOrderRef.current
+          const playbackOrder =
+            oldOrder.length > 0
+              ? [...oldOrder]
+              : currentQueue.map((_, index) => index)
 
-      shuffleOrderRef.current = adjustedOrder
-    }
-  }
+          const adjustedOrder = playbackOrder.map((index) =>
+            index >= insertIndex ? index + 1 : index,
+          )
 
-  function addToQueue(track: MusicTrack): void {
-    const currentQueue = queueRef.current
-    const newTrackIndex = currentQueue.length
-    const nextQueue = [...currentQueue, track]
+          const currentPosition = adjustedOrder.indexOf(currentIndex)
 
-    // Keep the current playback position unchanged.
-    updateQueue(nextQueue, queueIndexRef.current)
+          adjustedOrder.splice(
+            currentPosition >= 0
+              ? currentPosition + 1
+              : adjustedOrder.length,
+            0,
+            insertIndex,
+          )
 
-    // If shuffle is active, put this track at the end
-    // of the existing playback order.
-    if (shuffleRef.current) {
-      const playbackOrder =
-        shuffleOrderRef.current.length > 0
-          ? [...shuffleOrderRef.current]
-          : currentQueue.map((_, index) => index)
+          shuffleOrderRef.current = adjustedOrder
+        }
 
-      playbackOrder.push(newTrackIndex)
-      shuffleOrderRef.current = playbackOrder
-    }
-  }
+        void syncNativeQueue(nextQueue, currentIndex).catch((error) => {
+          console.error('[Resonance] Failed to sync queue after Play Next:', error)
+          setPlaybackError('Unable to update the native playback queue.')
+        })
+      }
+
+      function addToQueue(track: MusicTrack): void {
+        const currentQueue = queueRef.current
+        const newTrackIndex = currentQueue.length
+        const nextQueue = [...currentQueue, track]
+
+        updateQueue(nextQueue, queueIndexRef.current)
+
+        if (shuffleRef.current) {
+          const playbackOrder =
+            shuffleOrderRef.current.length > 0
+              ? [...shuffleOrderRef.current]
+              : currentQueue.map((_, index) => index)
+
+          playbackOrder.push(newTrackIndex)
+          shuffleOrderRef.current = playbackOrder
+        }
+
+        if (currentQueue.length === 0) {
+          return
+        }
+
+        void syncNativeQueue(
+          nextQueue,
+          Math.max(0, queueIndexRef.current),
+        ).catch((error) => {
+          console.error(
+            '[Resonance] Failed to sync queue after adding a track:',
+            error,
+          )
+          setPlaybackError('Unable to update the native playback queue.')
+        })
+      }
 
   /*
    * Start playback using a complete queue.
@@ -1235,44 +1256,119 @@ for (
    * starts track 5 and retains tracks 6+
    * as upcoming tracks.
    */
-  async function playQueue(
-    tracks: MusicTrack[],
-    startIndex = 0,
-  ): Promise<void> {
-    if (tracks.length === 0) {
-      return
-    }
 
-    const safeIndex =
-      Math.max(
+    async function playQueue(
+      tracks: MusicTrack[],
+      startIndex = 0,
+    ): Promise<void> {
+      if (tracks.length === 0) {
+        return
+      }
+
+      const safeIndex = Math.max(
         0,
-        Math.min(
-          startIndex,
-          tracks.length - 1,
-        ),
+        Math.min(startIndex, tracks.length - 1),
       )
 
-    const nextQueue =
-      [...tracks]
+      const nextQueue = [...tracks]
+      const track = nextQueue[safeIndex]
 
-    updateQueue(
-      nextQueue,
-      safeIndex,
-    )
+      if (!track) {
+        return
+      }
 
-    const track =
-      nextQueue[safeIndex]
+      updateQueue(nextQueue, safeIndex)
 
-    if (!track) {
-      return
-    }
+      // Native Android: send the entire queue to Media3.
+      if (Capacitor.isNativePlatform()) {
+        const activeProvider = providerRef.current
 
-    if (Capacitor.isNativePlatform()) {
-      await playNativeTrackAtIndex(safeIndex, track)
-    } else {
+        if (!activeProvider) {
+          setPlaybackError(
+            'Connect a music server before playing music.',
+          )
+          return
+        }
+
+        const requestId = ++playRequestRef.current
+
+        try {
+          setPlaybackError(null)
+          setIsLoading(true)
+          audioRef.current?.pause()
+
+          // Resolve every authenticated stream URL before
+          // sending the queue to the native playback service.
+          const nativeTracks = await Promise.all(
+            nextQueue.map(async (queueTrack) => ({
+              id: queueTrack.id,
+              url: await activeProvider.getStreamUrl(
+                queueTrack.id,
+              ),
+              title: queueTrack.title,
+              artist: queueTrack.artistName,
+              album: queueTrack.albumName,
+            })),
+          )
+
+          // Ignore stale requests if the user selected
+          // another track while URLs were being resolved.
+          if (requestId !== playRequestRef.current) {
+            return
+          }
+
+          resetScrobbleState(track.id)
+          setNativePlaybackActive(true)
+
+          await ResonanceNativePlayer.setPlaybackModes({
+            repeatMode: repeatModeRef.current,
+            shuffleEnabled: shuffleRef.current,
+          })
+
+          await ResonanceNativePlayer.setQueue({
+            tracks: nativeTracks,
+            startIndex: safeIndex,
+          })
+
+          if (requestId !== playRequestRef.current) {
+            return
+          }
+
+          queueIndexRef.current = safeIndex
+          setQueueIndex(safeIndex)
+          setCurrentTrack(track)
+          setCurrentTime(0)
+          setDuration(track.duration ?? 0)
+          setIsPlaying(true)
+          setIsLoading(false)
+          recordTrackPlayed(track)
+          return
+        } catch (error) {
+          if (requestId !== playRequestRef.current) {
+            return
+          }
+
+          console.error(
+            '[Resonance] Native queue setup failed:',
+            error,
+          )
+
+          setNativePlaybackActive(false)
+          setIsPlaying(false)
+          setIsLoading(false)
+          setPlaybackError(
+            error instanceof Error
+              ? error.message
+              : 'Native queue playback failed.',
+          )
+          return
+        }
+      }
+
+      // Browser playback remains unchanged.
       await playTrackAtIndex(safeIndex, track)
     }
-  }
+
 
   async function playQueueTrack(
     index: number,
@@ -1287,153 +1383,169 @@ for (
       }
 
     if (Capacitor.isNativePlatform()) {
-      await playNativeTrackAtIndex(index, track)
+      // Preserve the complete queue when the user selects a specific item.
+      await playQueue(tracks, index)
     } else {
       await playTrackAtIndex(index, track)
     }
-    }
+  }
 
-      function removeFromQueue(
-            index: number,
-        ): void {
-            const currentQueue =
-            queueRef.current
+      function removeFromQueue(index: number): void {
+        const currentQueue = queueRef.current
 
-            if (
-            index < 0 ||
-            index >= currentQueue.length
-            ) {
-            return
-            }
-
-            const currentIndex =
-            queueIndexRef.current
-
-            const nextQueue =
-            currentQueue.filter(
-                (_, queueIndex) =>
-                queueIndex !== index,
-            )
-
-            if (nextQueue.length === 0) {
-            audioRef.current?.pause()
-
-            if (audioRef.current) {
-                audioRef.current.removeAttribute('src')
-                audioRef.current.load()
-            }
-
-            queueRef.current = []
-            queueIndexRef.current = -1
-
-            setQueue([])
-            setQueueIndex(-1)
-            setCurrentTrack(null)
-            setCurrentTime(0)
-            setDuration(0)
-            setIsPlaying(false)
-            setIsLoading(false)
-
-            return
-            }
-
-            let nextIndex = currentIndex
-
-            if (index < currentIndex) {
-            nextIndex -= 1
-            }
-
-            if (index === currentIndex) {
-            nextIndex = Math.min(
-                currentIndex,
-                nextQueue.length - 1,
-            )
-            }
-
-            const nextTrack = nextQueue[nextIndex]
-            updateQueue(
-            nextQueue,
-            nextIndex,
-            )
-
-            if (index === currentIndex && nextTrack) {
-                void playQueueIndex(nextIndex, nextTrack)
-            }
+        if (index < 0 || index >= currentQueue.length) {
+          return
         }
+
+        const currentIndex = queueIndexRef.current
+        const nextQueue = currentQueue.filter(
+          (_, queueIndex) => queueIndex !== index,
+        )
+
+        if (nextQueue.length === 0) {
+          audioRef.current?.pause()
+
+          if (audioRef.current) {
+            audioRef.current.removeAttribute('src')
+            audioRef.current.load()
+          }
+
+          queueRef.current = []
+          queueIndexRef.current = -1
+
+          setQueue([])
+          setQueueIndex(-1)
+          setCurrentTrack(null)
+          setCurrentTime(0)
+          setDuration(0)
+          setIsPlaying(false)
+          setIsLoading(false)
+
+          if (Capacitor.isNativePlatform()) {
+            setNativePlaybackActive(false)
+            void ResonanceNativePlayer.updateQueue({
+              tracks: [],
+              startIndex: 0,
+            }).catch((error) => {
+              console.error('[Resonance] Failed to clear the native queue:', error)
+            })
+          }
+
+          return
+        }
+
+        let nextIndex = currentIndex
+
+        if (index < currentIndex) {
+          nextIndex -= 1
+        } else if (index === currentIndex) {
+          nextIndex = Math.min(currentIndex, nextQueue.length - 1)
+        }
+
+        const nextTrack = nextQueue[nextIndex]
+
+        updateQueue(nextQueue, nextIndex)
+
+        if (index === currentIndex && nextTrack) {
+          void playQueue(nextQueue, nextIndex)
+          return
+        }
+
+        if (Capacitor.isNativePlatform()) {
+          void syncNativeQueue(nextQueue, nextIndex).catch((error) => {
+            console.error('[Resonance] Failed to sync queue after removing a track:', error)
+            setPlaybackError('Unable to update the native playback queue.')
+          })
+        }
+      }
   
       function moveQueueItem(
         fromIndex: number,
         toIndex: number,
-    ): void {
-        const currentQueue =
-        queueRef.current
+      ): void {
+        const currentQueue = queueRef.current
 
         if (
-        fromIndex < 0 ||
-        fromIndex >= currentQueue.length ||
-        toIndex < 0 ||
-        toIndex >= currentQueue.length ||
-        fromIndex === toIndex
+          fromIndex < 0 ||
+          fromIndex >= currentQueue.length ||
+          toIndex < 0 ||
+          toIndex >= currentQueue.length ||
+          fromIndex === toIndex
         ) {
-        return
+          return
         }
 
-        const nextQueue =
-        [...currentQueue]
-
-        const [
-        movedTrack,
-        ] = nextQueue.splice(
-        fromIndex,
-        1,
-        )
+        const nextQueue = [...currentQueue]
+        const [movedTrack] = nextQueue.splice(fromIndex, 1)
 
         if (!movedTrack) {
-        return
+          return
         }
 
-        nextQueue.splice(
-        toIndex,
-        0,
-        movedTrack,
-        )
+        nextQueue.splice(toIndex, 0, movedTrack)
 
-        const currentIndex =
-        queueIndexRef.current
-
-        let nextIndex =
-        currentIndex
+        const currentIndex = queueIndexRef.current
+        let nextIndex = currentIndex
 
         if (currentIndex === fromIndex) {
-        nextIndex = toIndex
+          nextIndex = toIndex
         } else if (
-        fromIndex < currentIndex &&
-        toIndex >= currentIndex
+          fromIndex < currentIndex &&
+          toIndex >= currentIndex
         ) {
-        nextIndex -= 1
+          nextIndex -= 1
         } else if (
-        fromIndex > currentIndex &&
-        toIndex <= currentIndex
+          fromIndex > currentIndex &&
+          toIndex <= currentIndex
         ) {
-        nextIndex += 1
+          nextIndex += 1
         }
 
-        updateQueue(
-        nextQueue,
-        nextIndex,
-        )
-    }
+        updateQueue(nextQueue, nextIndex)
+
+        // Keep shuffle order aligned with the reordered queue.
+        if (shuffleRef.current) {
+          shuffleOrderRef.current = shuffleOrderRef.current.map(
+            (index) => {
+              if (index === fromIndex) {
+                return toIndex
+              }
+
+              if (fromIndex < toIndex && index > fromIndex && index <= toIndex) {
+                return index - 1
+              }
+
+              if (fromIndex > toIndex && index >= toIndex && index < fromIndex) {
+                return index + 1
+              }
+
+              return index
+            },
+          )
+        }
+
+        if (Capacitor.isNativePlatform()) {
+          void syncNativeQueue(nextQueue, nextIndex).catch((error) => {
+            console.error(
+              '[Resonance] Failed to sync queue after moving a track:',
+              error,
+            )
+            setPlaybackError('Unable to update the native playback queue.')
+          })
+        }
+      }
 
       function clearQueue(): void {
         audioRef.current?.pause()
 
         if (audioRef.current) {
-        audioRef.current.removeAttribute('src')
-        audioRef.current.load()
+          audioRef.current.removeAttribute('src')
+          audioRef.current.load()
         }
 
         queueRef.current = []
         queueIndexRef.current = -1
+        shuffleOrderRef.current = []
 
         setQueue([])
         setQueueIndex(-1)
@@ -1443,7 +1555,21 @@ for (
         setIsPlaying(false)
         setIsLoading(false)
         setPlaybackError(null)
-    }
+
+        if (Capacitor.isNativePlatform()) {
+          setNativePlaybackActive(false)
+
+          void ResonanceNativePlayer.updateQueue({
+            tracks: [],
+            startIndex: 0,
+          }).catch((error) => {
+            console.error(
+              '[Resonance] Failed to clear the native playback queue:',
+              error,
+            )
+          })
+        }
+      }
 
 
     function pause() {
@@ -1519,6 +1645,15 @@ for (
     shuffleRef.current = nextShuffle
     setShuffle(nextShuffle)
 
+    if (Capacitor.isNativePlatform()) {
+      void ResonanceNativePlayer.setPlaybackModes({
+        repeatMode: repeatModeRef.current,
+        shuffleEnabled: nextShuffle,
+      }).catch((error) => {
+        console.error('[Resonance] Failed to update native shuffle mode:', error)
+      })
+    }
+
     if (nextShuffle) {
       const currentIndex = queueIndexRef.current
 
@@ -1548,6 +1683,15 @@ for (
 
         repeatModeRef.current = next
 
+        if (Capacitor.isNativePlatform()) {
+          void ResonanceNativePlayer.setPlaybackModes({
+            repeatMode: next,
+            shuffleEnabled: shuffleRef.current,
+          }).catch((error) => {
+            console.error('[Resonance] Failed to update native repeat mode:', error)
+          })
+        }
+
         return next
     })
     }
@@ -1557,6 +1701,15 @@ for (
         async function next(): Promise<void> {
         const currentQueue =
             queueRef.current
+
+        if (Capacitor.isNativePlatform() && nativePlaybackActive) {
+          try {
+            await ResonanceNativePlayer.skipToNext()
+          } catch (error) {
+            console.error('[Resonance] Native next-track request failed:', error)
+          }
+          return
+        }
 
         if (currentQueue.length === 0) {
             return
@@ -1659,59 +1812,31 @@ for (
         }
         }
 
-      useEffect(() => {
-        nativeTrackEndedHandlerRef.current = () => {
-          console.log('[Resonance] Native track ended — advancing queue')
-          void next()
-        }
+        useEffect(() => {
+          nativeTrackEndedHandlerRef.current = () => {
+            console.log('[Resonance] Native queue reached its end')
 
-        nativeNavigationHandlerRef.current = (action) => {
-          if (action === 'next') {
-            void next()
-          } else {
-            void previous()
-          }
-        }
-      })
-
-      useEffect(() => {
-        let cancelled = false
-        let listenerHandle:
-          | { remove: () => Promise<void> }
-          | undefined
-
-        void ResonanceNativePlayer.addListener(
-          'nativeNavigation',
-          (event) => {
-            if (cancelled) {
+            if (repeatModeRef.current === 'all') {
+              console.log(
+                '[Resonance] Repeat All is enabled; native queue looping will be handled separately',
+              )
               return
             }
-            console.log('[Resonance] Native navigation received:', event.action);
-            nativeNavigationHandlerRef.current?.(event.action)
-          },
-        ).then((handle) => {
-          if (cancelled) {
-            void handle.remove()
-          } else {
-            listenerHandle = handle
+
+            setIsPlaying(false)
+            setIsLoading(false)
           }
-        }).catch((error) => {
-          console.error(
-            '[Resonance] Failed to subscribe to native navigation:',
-            error,
-          )
+
+          nativeNavigationHandlerRef.current = (action) => {
+            // Kept for compatibility with older native plugin versions.
+            // Current notification controls navigate the Media3 playlist directly.
+            if (action === 'next') {
+              void next()
+            } else {
+              void previous()
+            }
+          }
         })
-
-        return () => {
-          cancelled = true
-
-          if (listenerHandle) {
-            void listenerHandle.remove()
-          }
-        }
-      }, [])
-
-
 
     function getPlaybackOrder(): number[] {
         if (!shuffle) {
@@ -1727,6 +1852,15 @@ for (
         async function previous(): Promise<void> {
         const currentQueue =
             queueRef.current
+
+        if (Capacitor.isNativePlatform() && nativePlaybackActive) {
+          try {
+            await ResonanceNativePlayer.skipToPrevious()
+          } catch (error) {
+            console.error('[Resonance] Native previous-track request failed:', error)
+          }
+          return
+        }
 
         if (currentQueue.length === 0) {
             return

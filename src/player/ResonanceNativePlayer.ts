@@ -3,6 +3,7 @@ import { registerPlugin } from '@capacitor/core'
 
 
 export interface ResonancePlaybackState {
+  mediaId: string
   title: string
   artist: string
   album: string
@@ -26,6 +27,38 @@ export interface ResonancePlayerPlugin {
     artist?: string
     album?: string
   }): Promise<{ accepted: boolean }>
+
+  
+  setQueue(options: {
+    tracks: Array<{
+      id: string
+      url: string
+      title: string
+      artist?: string
+      album?: string
+    }>
+    startIndex: number
+  }): Promise<{ accepted: boolean }>
+
+  updateQueue(options: {
+    tracks: {
+      id: string
+      url: string
+      title: string
+      artist?: string
+      album?: string
+    }[]
+    startIndex: number
+  }): Promise<{ accepted: boolean }>
+
+  setPlaybackModes(options: {
+    repeatMode: 'off' | 'all' | 'one'
+    shuffleEnabled: boolean
+  }): Promise<{ accepted: boolean }>
+
+  skipToNext(): Promise<void>
+
+  skipToPrevious(): Promise<void>
 
   pause(): Promise<void>
 

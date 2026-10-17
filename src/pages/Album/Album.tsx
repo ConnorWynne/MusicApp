@@ -28,6 +28,7 @@ function Album() {
     currentTrack,
     isPlaying,
     playQueue,
+    shuffle,
     toggleShuffle,
   } = usePlayer()
 
@@ -37,7 +38,7 @@ function Album() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!provider || !albumId) {
+    if (!provider) {
       return
     }
 
@@ -46,6 +47,10 @@ function Album() {
 
     async function loadAlbum() {
       if (!albumId) {
+        if (!cancelled) {
+          setError('No album was specified.')
+          setLoading(false)
+        }
         return
       }
 
@@ -60,13 +65,13 @@ function Album() {
           currentProvider.getAlbumTracks(albumId),
         ])
 
-        if (!cancelled) {
-          setAlbum(albumResult)
-          setTracks(trackResults)
+        if (cancelled) return
 
-          if (!albumResult) {
-            setError('Album not found.')
-          }
+        setAlbum(albumResult)
+        setTracks(trackResults)
+
+        if (!albumResult) {
+          setError('Album not found.')
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -97,9 +102,12 @@ function Album() {
   function shuffleAlbum() {
     if (tracks.length === 0) return
 
-    toggleShuffle()
-    void playQueue(tracks, 0)
+    if (!shuffle) {
+      toggleShuffle()
     }
+
+    void playQueue(tracks, 0)
+  }
 
   if (!provider) {
     return (

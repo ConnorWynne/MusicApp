@@ -1,0 +1,240 @@
+
+.home-page {
+  width: 100%;
+  min-width: 0;
+  padding: 28px 20px 40px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.home-heading {
+  margin-bottom: 30px;
+}
+
+.home-heading h1 {
+  margin: 10px 0;
+  font-size: clamp(2rem, 8vw, 3rem);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+}
+
+.home-heading > p:last-child,
+.home-muted,
+.home-empty > p,
+.home-discover > p {
+  color: var(--text-secondary, #aaa);
+  line-height: 1.5;
+}
+
+.home-section {
+  margin-top: 34px;
+  min-width: 0;
+}
+
+.home-section h2,
+.home-empty h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  letter-spacing: -0.025em;
+}
+
+.home-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.home-section-heading a {
+  flex-shrink: 0;
+  color: #b69aff;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.home-shortcuts {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 0 8px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.home-shortcuts::-webkit-scrollbar,
+.home-album-row::-webkit-scrollbar {
+  display: none;
+}
+
+.home-shortcuts a {
+  flex: 0 0 auto;
+  padding: 11px 16px;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 999px;
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.home-album-row {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.home-album-card {
+  display: flex;
+  flex: 0 0 142px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.home-album-cover {
+  display: block;
+  width: 142px;
+  height: 142px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #202024;
+}
+
+.home-artwork-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b69aff;
+  font-size: 2.5rem;
+}
+
+.home-album-title,
+.home-album-artist {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-album-title {
+  margin-top: 5px;
+  font-weight: 600;
+}
+
+.home-album-artist {
+  color: var(--text-secondary, #aaa);
+  font-size: 0.9rem;
+}
+
+.home-track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.home-track {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 13px;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home-track:active {
+  background: var(--surface-hover, #242428);
+}
+
+.home-track-cover {
+  flex: 0 0 54px;
+  width: 54px;
+  height: 54px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #202024;
+}
+
+.home-track-details {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.home-track-title,
+.home-track-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-track-title {
+  font-weight: 600;
+}
+
+.home-track-subtitle {
+  color: var(--text-secondary, #aaa);
+  font-size: 0.9rem;
+}
+
+.home-track-play {
+  flex: 0 0 auto;
+  padding: 8px;
+  font-size: 0.9rem;
+}
+
+.home-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  margin-top: 8px;
+  padding: 0 18px;
+  border: 1px solid var(--border-color, #39343f);
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.home-empty {
+  margin-top: 42px;
+}
+
+.home-error {
+  margin-top: 20px;
+  color: #ff9292;
+  line-height: 1.5;
+}
+
+.home-discover {
+  padding-bottom: 20px;
+}
+
+@media (max-width: 360px) {
+  .home-page {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .home-album-card {
+    flex-basis: 126px;
+  }
+
+  .home-album-cover {
+    width: 126px;
+    height: 126px;
+  }
+}
