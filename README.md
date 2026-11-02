@@ -1,9 +1,9 @@
-# MusicApp
+# MusicApp - Resonance
 
 A cross-platform music streaming application being built from scratch
 with **React, TypeScript, and Vite**.
 
-MusicApp is designed to provide a modern Spotify/YouTube Music-style
+Resonance is designed to provide a modern Spotify/YouTube Music-style
 experience while connecting to self-hosted music servers. The first
 implemented provider is **Navidrome through the OpenSubsonic/Subsonic
 API**.
@@ -40,7 +40,7 @@ application around a single backend.
 
 ## Project Overview
 
-**MusicApp** is a self-hosted-friendly music streaming client.
+**Resonance** is a self-hosted-friendly music streaming client.
 
 The initial goal is to connect to a personal Navidrome server and
 provide a polished music-player experience. The application is being
@@ -53,7 +53,7 @@ regardless of the backend.
 
 ### Long-term vision
 
-MusicApp should eventually support:
+Resonance should eventually support:
 
 -   Multiple music servers
 -   Navidrome
@@ -195,7 +195,7 @@ completed
 ## 1. Initial application setup
 
 -   Vite React TypeScript application created.
--   Project named `MusicApp`.
+-   Project named `Resonance`.
 -   ESLint configured.
 -   Git repository created.
 -   Repository published to GitHub.
@@ -272,7 +272,7 @@ application types.
 
 ## 5. Navidrome integration
 
-MusicApp currently connects to Navidrome through its
+Resonance currently connects to Navidrome through its
 OpenSubsonic-compatible API.
 
 Implemented provider operations include:
@@ -636,7 +636,7 @@ rather than replacing the interfaces.
 
 ## Current API approach
 
-MusicApp uses the OpenSubsonic-compatible REST API.
+Resonance uses the OpenSubsonic-compatible REST API.
 
 The client handles:
 
@@ -742,7 +742,7 @@ A current supported Node.js installation should be used.
 
 ## Install dependencies
 
-From the MusicApp project directory:
+From the Resonance project directory:
 
 ``` powershell
 npm install
@@ -1301,7 +1301,7 @@ The intended long-term architecture is:
 
 ``` text
                          ┌─────────────────────┐
-                         │      MusicApp       │
+                         │      Resonance      │
                          │         UI          │
                          └──────────┬──────────┘
                                     │
@@ -1422,7 +1422,7 @@ Established:
 
 ------------------------------------------------------------------------
 
-### `Connect MusicApp to Navidrome library`
+### `Connect Resonance to Navidrome library`
 
 Established:
 
@@ -1501,7 +1501,7 @@ A feature should generally be considered complete when:
 
 # Project Philosophy
 
-MusicApp should remain:
+Resonance should remain:
 
 **Modular**
 
@@ -1534,7 +1534,7 @@ pleasant to use.
 
 ## Current Bottom Line
 
-MusicApp has progressed beyond the initial prototype stage.
+Resonance has progressed beyond the initial prototype stage.
 
 The application can currently:
 
